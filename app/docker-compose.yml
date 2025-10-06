@@ -1,0 +1,31 @@
+version: '3.8'  # Versión de Docker Compose que estamos utilizando
+
+services:
+  db:
+    image: postgres:15  # Imagen oficial de PostgreSQL versión 15
+    container_name: postgres-db  # Nombre del contenedor para la base de datos
+    environment:
+      POSTGRES_DB: sistemagestion  # Nombre de la base de datos que se va a crear
+      POSTGRES_USER: david         # Usuario de la base de datos
+      POSTGRES_PASSWORD: 1234      # Contraseña del usuario
+    ports:
+      - "5432:5432"  # Mapeo de puertos: host:contenedor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Volumen persistente para los datos de la base de datos
+
+  app:
+    build: .  # Construyo la imagen desde el Dockerfile en el directorio actual
+    container_name: spring-app  # Nombre del contenedor para la aplicación Spring Boot
+    ports:
+      - "8080:8080"  # Mapeo de puertos: host:contenedor
+    depends_on:
+      - db  # Indico que este servicio depende de que la base de datos esté disponible
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion  # URL de conexión a la base de datos
+      SPRING_DATASOURCE_USERNAME: david  # Usuario que utiliza Spring para conectarse
+      SPRING_DATASOURCE_PASSWORD: 1234  # Contraseña del usuario
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update  # Permite que Hibernate actualice el esquema de la base de datos
+      SPRING_JPA_SHOW_SQL: "true"  # Muestra las consultas SQL por consola
+
+volumes:
+  postgres_data:  # Defino el volumen persistente para los datos de PostgreSQL

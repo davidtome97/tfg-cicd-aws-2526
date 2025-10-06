@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="https://www.thymeleaf.org/extras/spring-security">
+<head>
+  <meta charset="UTF-8">
+  <title>Página Principal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container mt-5">
+
+<h1 class="text-center mb-4">Bienvenido al Sistema de Gestión</h1>
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">📦 Sistema Gestión</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav">
+        <li class="nav-item">
+          <a class="nav-link" href="/">Inicio</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/login">Login</a>
+        </li>
+        <span sec:authorize="isAuthenticated()">
+           <a href="/logout" class="btn btn-outline-danger btn-sm">Cerrar sesión</a>
+        </span>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<form id="logoutForm" th:action="@{/logout}" method="post" style="display: none;"></form>
+
+<div class="card p-4 shadow-sm">
+  <p class="mb-3">Esta es la página principal de la aplicación. Desde aquí podemos acceder a las funcionalidades disponibles:</p>
+  <ul class="list-group">
+    <li class="list-group-item">Login y logout seguro</li>
+  </ul>
+</div>
+
+</body>
+</html>

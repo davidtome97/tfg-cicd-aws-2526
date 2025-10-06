@@ -1,0 +1,11 @@
+cat > .gitignore << 'EOF'
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Maven / Java
+app/target/
+app/.mvn/wrapper/maven-wrapper.jar
+*.log
+EOF
