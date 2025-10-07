@@ -1,0 +1,24 @@
+name: protect-main (only allow PRs from develop)
+
+# Este workflow se ejecutará automáticamente cuando alguien abra un Pull Request hacia 'main'
+on:
+  pull_request:
+    branches: [ main ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  enforce-source-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR source branch
+        run: |
+          # Muestro por consola la rama destino y la rama origen del Pull Request
+          echo "Base branch  : ${{ github.base_ref }}"
+          echo "Source branch: ${{ github.head_ref }}"
+
+          # Regla de seguridad: solo se permiten PRs a 'main' si vienen desde 'develop'
+          if [[ "${{ github.head_ref }}" != "develop" ]]; then
+            echo "::error::Solo se permiten PRs a 'main' desde 'develop'."
+            echo "::error::Rama origen actual: '${{ github.head_ref }}'"
+            exit 1
+          fi
