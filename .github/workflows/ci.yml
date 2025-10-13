@@ -19,15 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Make mvnw executable
         run: chmod +x mvnw
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
+
       - name: Build (Maven Wrapper)
-        run: ./mvnw -B -DskipTests package
+        run: ./mvnw -B -DskipTests -f app/pom.xml package
 
   test:
     name: Test
@@ -35,21 +38,25 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
       - name: Make mvnw executable
         run: chmod +x mvnw
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
+
       - name: Run tests
-        run: ./mvnw -B test
+        run: ./mvnw -B -f app/pom.xml test
+
       - name: Publica reports (siempre)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: surefire-reports
-          path: "**/target/surefire-reports/**"
+          path: "app/**/target/surefire-reports/**"
 
   sonar:
     name: SonarQube
@@ -58,19 +65,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Necesario para que SonarQube vea el historial de commits
+
       - name: Make mvnw executable
         run: chmod +x mvnw
+
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
+
       - name: SonarQube Scan (Maven)
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw -B -DskipTests sonar:sonar \
+          ./mvnw -B -DskipTests -f app/pom.xml sonar:sonar \
             -Dsonar.host.url=${SONAR_HOST_URL} \
-            -Dsonar.login=${SONAR_TOKEN}
+            -Dsonar.login=${SONAR_TOKEN} \
+            -Dsonar.projectBaseDir=app
