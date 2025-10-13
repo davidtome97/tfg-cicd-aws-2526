@@ -49,7 +49,7 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
-        run: ./mvnw -B -f app/pom.xml test
+        run: ./mvnw -B -f app/pom.xml -Dspring.profiles.active=test test
 
       - name: Publica reports (siempre)
         if: always()
