@@ -65,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Necesario para que SonarQube vea el historial de commits
+          fetch-depth: 0  # Necesario para que SonarQube vea el historial
 
       - name: Make mvnw executable
         run: chmod +x mvnw
@@ -76,12 +76,17 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
 
+      # Compila para generar app/target/classes
+      - name: Build classes for Sonar
+        run: ./mvnw -B -DskipTests -f app/pom.xml package
+
+      # Análisis SonarCloud
       - name: SonarQube Scan (Maven)
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw -B -DskipTests -f app/pom.xml sonar:sonar \
+          ./mvnw -B -f app/pom.xml sonar:sonar \
             -Dsonar.host.url=${SONAR_HOST_URL} \
             -Dsonar.login=${SONAR_TOKEN} \
-            -Dsonar.projectBaseDir=app
+            -Dsonar.java.binaries=target/classes
