@@ -7,18 +7,15 @@ WORKDIR /workspace
 # Copiamos el repo
 COPY . .
 
-# Por si el wrapper no es ejecutable
-RUN chmod +x mvnw || true
-
-# Compila el modulo "app" y sus dependencias
-# anado el repo local explicitamente (solo dentro del contenedor)
-RUN ./mvnw -B -DskipTests -Dmaven.repo.local=/root/.m2/repository -pl app -am package
+# Compila el módulo "app" y sus dependencias (sin tests)
+# Uso mvn para evitar que lea .mvn/maven.config
+RUN mvn -B -DskipTests -f app/pom.xml package
 
 ########## Etapa de runtime (JRE ligero) ##########
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Copio el JAR ya construido desde la etapa anterior
+# Copiamos el JAR ya construido desde la etapa anterior
 COPY --from=build /workspace/app/target/*.jar /app/app.jar
 
 # Puerto por defecto de Spring Boot
