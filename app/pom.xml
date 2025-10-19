@@ -1,39 +1,29 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- ÚNICO parent: el agregador raíz -->
     <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.5</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <groupId>com.sistemagestionapp</groupId>
+        <artifactId>tfg-parent</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
-    <groupId>com</groupId>
+
+    <!-- groupId y version se heredan del padre; puedes omitirlos -->
     <artifactId>SistemaGestionApp</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
     <name>SistemaGestionApp</name>
     <description>SistemaGestionApp</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
-    <properties>
-        <java.version>17</java.version>
 
-        <!-- SonarCloud -->
+    <properties>
+        <!-- SonarCloud (mantengo tus propiedades) -->
         <sonar.organization>davidtome97</sonar.organization>
         <sonar.projectKey>davidtome97_tfg-cicd-aws-2526</sonar.projectKey>
         <sonar.projectName>TFG CI/CD AWS 25/26</sonar.projectName>
     </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -126,7 +116,5 @@
                 </executions>
             </plugin>
         </plugins>
-
     </build>
-
 </project>
