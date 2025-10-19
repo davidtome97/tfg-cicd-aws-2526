@@ -77,6 +77,9 @@ jobs:
           key: ${{ secrets.EC2_LLAVE_SSH }}
           source: "infra/ec2/docker-compose.yml"
           target: "~/app"
+          strip_components: 2   # quito "infra/ec2" y deja el archivo en ~/app/
+          overwrite: true
+          timeout: 120s
 
       # 8 Conecto por SSH y levanto el contenedor
       - name: Ejecutar deploy en EC2
