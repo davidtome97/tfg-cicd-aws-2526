@@ -1,0 +1,11 @@
+.git
+.gitignore
+target
+**/target
+app/target/*.original
+app/target/classes
+app/src
+infra
+docs
+*.md
+AWSCLIV2.pkg

@@ -1,0 +1,10 @@
+# docker-compose para el despliegue en EC2
+services:
+  app:
+    image: ${IMAGEN}          # se coge desde el workflow
+    restart: always
+    ports:
+      - "80:8080"             # ajusta el puerto según la app
+    env_file:
+      - .env.app              # archivo con variables de entorno de la app
+
