@@ -14,7 +14,7 @@ services:
       - postgres_data:/var/lib/postgresql/data  # Volumen persistente para los datos de la base de datos
 
   app:
-    build: .  # Construyo la imagen desde el Dockerfile en el directorio actual
+    build: app  # Construyo la imagen desde el Dockerfile en el directorio actual
     container_name: spring-app  # Nombre del contenedor para la aplicación Spring Boot
     ports:
       - "8080:8080"  # Mapeo de puertos: host:contenedor

@@ -1,5 +1,4 @@
-cat > .gitignore << 'EOF'
-# IDE
+# IDE / OS
 .idea/
 *.iml
 .DS_Store
@@ -8,4 +7,14 @@ cat > .gitignore << 'EOF'
 app/target/
 app/.mvn/wrapper/maven-wrapper.jar
 *.log
-EOFapp/env/
+*.class
+*.jar
+*.war
+
+# Entornos
+app/env/
+.env
+
+# Sonar y builds temporales
+.scannerwork/
+target/
