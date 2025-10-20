@@ -1,11 +1,36 @@
-# docker-compose para el despliegue en EC2
+version: "3.8"
+
 services:
+  db:
+    image: postgres:15
+    container_name: postgres-db
+    environment:
+      POSTGRES_DB: sistemagestion
+      POSTGRES_USER: david
+      POSTGRES_PASSWORD: 1234
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U david -d sistemagestion"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   app:
-    image: ${IMAGEN}          # se coge desde el workflow
+    image: ${IMAGEN}         # la imagen que publicamos desde el workflow
     container_name: spring-app
-    restart: always
     ports:
-      - "80:8080"             # ajusta el puerto según la app
-    env_file:
-      - .env.app              # archivo con variables de entorno de la app
+      - "80:8080"            # expongo la app por el puerto 80 público
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion
+      SPRING_DATASOURCE_USERNAME: david
+      SPRING_DATASOURCE_PASSWORD: 1234
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
 
