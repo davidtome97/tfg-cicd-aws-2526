@@ -64,6 +64,7 @@ sonar_java:
       -Dsonar.login="$SONAR_TOKEN"
       -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.organization="$SONAR_ORGANIZATION"
+      -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
 # ===================== NODE.JS =====================
 # Aqui anado los jobs para un proyecto Node (si existe package.json).
 # Yo: hago build y test; si no hay scripts definidos, no rompo el pipeline.
