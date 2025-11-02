@@ -130,15 +130,12 @@ sonar_node:
       -Dsonar.host.url="$SONAR_HOST_URL" \
       -Dsonar.login="$SONAR_TOKEN"
 
-#  DEPLOY (PREPARADO)  
-
-# Este job representa el despliegue, pero lo dejo en modo manual.
-# Asi se muestra en la interfaz de GitLab, pero no se ejecuta automaticamente.
-# Lo usare más adelante en la tarjeta [F3-4] cuando configuremos EC2/ECS.
+#  DEPLOY (PREPARADO) 
 deploy:
   stage: deploy
   when: manual
   allow_failure: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
-  script: echo "Deploy pendiente: se implementará en la tarjeta F3-4 (EC2/ECS)."
+  script:
+    - echo "Deploy pendiente - se implementará en la tarjeta F3-4 (EC2/ECS)"
