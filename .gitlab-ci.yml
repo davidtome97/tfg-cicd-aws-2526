@@ -1,38 +1,31 @@
-# ---------- STAGES ----------
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# ---------- DEFAULTS ----------
-default:
-  retry: 1
-  before_script:
-    - echo "Branch=$CI_COMMIT_BRANCH | SHA=$CI_COMMIT_SHORT_SHA"
-
-# ---------- SENTINELA (verifica que el pipeline arranca) ----------
+# ---------- JOB 1: Verificar que el pipeline arranca ----------
 pipeline_ok:
   stage: build
   script:
-    - echo "Pipeline iniciado correctamente ✅"
+    - echo " Pipeline iniciado correctamente"
 
-# ---------- TEST DE COMPROBACIÓN ----------
+# ---------- JOB 2: Test simulado ----------
 test_placeholder:
   stage: test
   script:
-    - echo "Ejecutando test simulado..."
-    - echo "Tests OK ✅"
+    - echo " Ejecutando test simulado..."
+    - echo "Tests OK"
 
-# ---------- SONAR (simulado) ----------
+# ---------- JOB 3: Análisis simulado ----------
 sonar_placeholder:
   stage: sonar
   script:
-    - echo "Análisis Sonar simulado... OK ✅"
+    - echo " Simulando análisis de código con SonarQube"
 
-# ---------- DEPLOY (solo visible manualmente) ----------
+# ---------- JOB 4: Despliegue manual ----------
 deploy:
   stage: deploy
   when: manual
   script:
-    - echo "Deploy pendiente — se implementará más adelante (F3-4)"
+    - echo " Deploy pendiente — se implementará más adelante (F3-4)"
