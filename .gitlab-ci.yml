@@ -110,5 +110,4 @@ deploy:
   allow_failure: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
-  script:
-    - echo "Deploy pendiente: se implementará en la tarjeta F3-4 (EC2/ECS)."
+  script: echo "Deploy pendiente:se implementará en la tarjeta F3-4 (EC2/ECS)."
