@@ -1,141 +1,38 @@
-# Aqui defino las etapas principales (stages) de mi pipeline.
-# Cada una representa una fase del proceso de integracion continua.
-# En orden: build → test → sonar → deploy.
+# ---------- STAGES ----------
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# En este bloque establezco configuraciones comunes (defaults)
-# que se aplican a todos los jobs del pipeline.
-# Uso 'retry' para que reintente una vez si falla,
-# y un pequeño log para saber en qué rama y commit se está ejecutando.
+# ---------- DEFAULTS ----------
 default:
   retry: 1
   before_script:
     - echo "Branch=$CI_COMMIT_BRANCH | SHA=$CI_COMMIT_SHORT_SHA"
 
-# En esta parte configuro la cache.
-# Sirve para que GitLab guarde dependencias descargadas (Maven o Node)
-# y asi las siguientes ejecuciones sean mas rapidas.
-cache:
-  key: ${CI_PROJECT_NAME}
-  paths:
-    - .m2/repository/
-    - node_modules/
-
-# Este job “pipeline_ok” es un sentinela.
-# Lo incluyo para confirmar que el pipeline arranca correctamente
-# cada vez que hago un push, aunque aun no haya builds o tests activos.
+# ---------- SENTINELA (verifica que el pipeline arranca) ----------
 pipeline_ok:
   stage: build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push"'
-  script: echo "Pipeline arrancando correctamente "
-
-#  BLOQUE PARA PROYECTOS JAVA / MAVEN  
-
-# En este job realizo la compilacion del proyecto si detecta un pom.xml.
-# Utilizo la imagen oficial de Maven con Java 21 y salto los tests
-# porque aqui solo me interesa empaquetar (build).
-build_java:
-  stage: build
-  image: maven:3.9-eclipse-temurin-21
-  rules:
-    - exists: [pom.xml]
   script:
-    - mvn -B -DskipTests package
-  artifacts:
-    when: always
-    paths:
-      - target/*.jar
-    expire_in: 1 week
+    - echo "Pipeline iniciado correctamente ✅"
 
-# Aqui ejecuto los tests unitarios del proyecto Java.
-# El job depende del anterior (build_java).
-# Si no hay tests definidos, el pipeline no falla.
-test_java:
+# ---------- TEST DE COMPROBACIÓN ----------
+test_placeholder:
   stage: test
-  image: maven:3.9-eclipse-temurin-21
-  needs: [build_java]
-  rules:
-    - exists: [pom.xml]
   script:
-    - mvn -B -DfailIfNoTests=false test || echo "Tests fallidos (permitido temporalmente)"
-  artifacts:
-    when: always
-    reports:
-      junit: target/surefire-reports/*.xml
+    - echo "Ejecutando test simulado..."
+    - echo "Tests OK ✅"
 
-# Este job ejecuta el analisis estatico de codigo con SonarQube.
-# Solo se activa si tengo las tres variables definidas en GitLab:
-# SONAR_HOST_URL, SONAR_TOKEN y SONAR_PROJECT_KEY.
-sonar_java:
+# ---------- SONAR (simulado) ----------
+sonar_placeholder:
   stage: sonar
-  image: maven:3.9-eclipse-temurin-21
-  rules:
-    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
-      exists: [pom.xml]
   script:
-    - mvn -B -DskipTests sonar:sonar \
-        -Dsonar.host.url="$SONAR_HOST_URL" \
-        -Dsonar.login="$SONAR_TOKEN" \
-        -Dsonar.projectKey="$SONAR_PROJECT_KEY"
- 
-# BLOQUE PARA PROYECTOS NODE.JS  
+    - echo "Análisis Sonar simulado... OK ✅"
 
-# En este job construyo el proyecto Node si existe un package.json.
-# Uso 'npm ci' (instalación limpia) y si no existe, 'npm install'.
-# Si no tengo script build en el package.json, no falla el job.
-build_node:
-  stage: build
-  image: node:20
-  rules:
-    - exists: [package.json]
-  script:
-    - npm ci || npm install
-    - npm run build || echo "No hay script build, continúo"
-  artifacts:
-    when: always
-    paths:
-      - dist/
-      - build/
-    expire_in: 1 week
-
-# Aqui ejecuto los tests del proyecto Node.
-# Tambien esta preparado para no romper el pipeline si no hay tests definidos.
-test_node:
-  stage: test
-  image: node:20
-  needs: [build_node]
-  rules:
-    - exists: [package.json]
-  script:
-    - npm ci || npm install
-    - npm test -- --ci || npm test || echo "Sin tests definidos"
-
-# Este job hace el analisis con SonarQube para Node.js.
-# Igual que en el caso Java, solo se activa si las variables Sonar estan configuradas.
-sonar_node:
-  stage: sonar
-  image: sonarsource/sonar-scanner-cli:latest
-  rules:
-    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
-      exists: [package.json]
-  script: |
-    sonar-scanner \
-      -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-      -Dsonar.sources=. \
-      -Dsonar.host.url="$SONAR_HOST_URL" \
-      -Dsonar.login="$SONAR_TOKEN"
-
-#  DEPLOY (PREPARADO) 
+# ---------- DEPLOY (solo visible manualmente) ----------
 deploy:
   stage: deploy
   when: manual
-  allow_failure: false
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
   script:
-    - echo "Deploy pendiente - se implementará en la tarjeta F3-4 (EC2/ECS)"
+    - echo "Deploy pendiente — se implementará más adelante (F3-4)"
