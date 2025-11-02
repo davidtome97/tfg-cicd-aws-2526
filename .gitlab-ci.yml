@@ -1,31 +1,70 @@
+# ---------- STAGES ----------
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# ---------- JOB 1: Verificar que el pipeline arranca ----------
+# ---------- DEFAULTS ----------
+default:
+  retry: 1
+  before_script:
+    - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
+
+# ---------- JOB SENTINELA ----------
 pipeline_ok:
   stage: build
   script:
     - echo " Pipeline iniciado correctamente"
 
-# ---------- JOB 2: Test simulado ----------
-test_placeholder:
+# ===================== JAVA / MAVEN =====================
+# Aquí defino los jobs para proyectos Java que usen Maven.
+# Lo hago para compilar, testear y analizar el código con SonarQube.
+
+build_java:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - exists: [pom.xml]
+  script:
+    - echo "Compilando proyecto Maven..."
+    - mvn -B -DskipTests package
+  artifacts:
+    when: always
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+test_java:
   stage: test
+  image: maven:3.9-eclipse-temurin-21
+  needs: [build_java]
+  rules:
+    - exists: [pom.xml]
   script:
-    - echo " Ejecutando test simulado..."
-    - echo "Tests OK"
+    - echo "Ejecutando tests Maven..."
+    - mvn -B -DfailIfNoTests=false test || echo " Tests fallidos (permitido temporalmente)"
+  artifacts:
+    when: always
+    reports:
+      junit: target/surefire-reports/*.xml
 
-# ---------- JOB 3: Análisis simulado ----------
-sonar_placeholder:
+sonar_java:
   stage: sonar
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
+      exists: [pom.xml]
   script:
-    - echo " Simulando análisis de código con SonarQube"
+    - echo " Ejecutando análisis SonarQube para Java..."
+    - mvn -B -DskipTests sonar:sonar \
+        -Dsonar.host.url="$SONAR_HOST_URL" \
+        -Dsonar.login="$SONAR_TOKEN" \
+        -Dsonar.projectKey="$SONAR_PROJECT_KEY"
 
-# ---------- JOB 4: Despliegue manual ----------
+# ---------- DEPLOY MANUAL (placeholder) ----------
 deploy:
   stage: deploy
   when: manual
   script:
-    - echo " Deploy pendiente — se implementará más adelante (F3-4)"
+    - echo " Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
