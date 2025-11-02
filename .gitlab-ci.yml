@@ -55,12 +55,13 @@ sonar_java:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists: [pom.xml]
   script:
-    - echo "Ejecuto analisis SonarQube para Java..."
-    - mvn -B -DskipTests sonar:sonar \
-        -Dsonar.host.url="$SONAR_HOST_URL" \
-        -Dsonar.login="$SONAR_TOKEN" \
-        -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-        -Dsonar.organization="$SONAR_ORGANIZATION"
+    - >
+      mvn -B -DskipTests
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+      -Dsonar.organization="$SONAR_ORGANIZATION"
+      org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar
 # ===================== NODE.JS =====================
 # Aqui anado los jobs para un proyecto Node (si existe package.json).
 # Yo: hago build y test; si no hay scripts definidos, no rompo el pipeline.
