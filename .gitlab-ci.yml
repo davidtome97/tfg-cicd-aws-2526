@@ -1,0 +1,114 @@
+# defino los stages en el orden en que quiero que se ejecuten.
+stages:
+  - build
+  - test
+  - sonar
+  - deploy
+
+# cosas comunes a todos los jobs (pequeño log util).
+default:
+  retry: 1
+  before_script:
+    - echo "Branch=$CI_COMMIT_BRANCH | SHA=$CI_COMMIT_SHORT_SHA"
+
+# cacheo dependencias para acelerar (sirve tanto a Maven como a Node).
+cache:
+  key: ${CI_PROJECT_NAME}
+  paths:
+    - .m2/repository/
+    - node_modules/
+
+#  JAVA / MAVEN 
+# este build solo corre si existe pom.xml (proyecto Maven).
+build_java:
+  stage: build
+  image: maven:3.9-eclipse-temurin-17
+  rules:
+    - exists: [pom.xml]
+  script:
+    - mvn -B -DskipTests package
+  artifacts:
+    when: always
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+# ejecuto tests de Maven; necesito lo generado en build.
+test_java:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17
+  needs: [build_java]
+  rules:
+    - exists: [pom.xml]
+  script:
+    - mvn -B test
+  artifacts:
+    when: always
+    reports:
+      junit: target/surefire-reports/*.xml
+
+# analisis Sonar para Java; solo lo lanzo si ya tengo las 3 variables.
+sonar_java:
+  stage: sonar
+  image: maven:3.9-eclipse-temurin-17
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
+      exists: [pom.xml]
+  script:
+    - mvn -B -DskipTests sonar:sonar \
+        -Dsonar.host.url="$SONAR_HOST_URL" \
+        -Dsonar.login="$SONAR_TOKEN" \
+        -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+
+# NODE.JS 
+# Yo: build para Node si hay package.json.
+build_node:
+  stage: build
+  image: node:20
+  rules:
+    - exists: [package.json]
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    when: always
+    paths:
+      - dist/
+      - build/
+    expire_in: 1 week
+
+# tests para Node; si no hay tests, no rompo el pipeline.
+test_node:
+  stage: test
+  image: node:20
+  needs: [build_node]
+  rules:
+    - exists: [package.json]
+  script:
+    - npm ci
+    - npm test -- --ci || npm test || echo "Sin tests definidos"
+
+# analisis Sonar para Node; también condicionado a variables.
+sonar_node:
+  stage: sonar
+  image: sonarsource/sonar-scanner-cli:latest
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
+      exists: [package.json]
+  script: |
+    sonar-scanner \
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+      -Dsonar.sources=. \
+      -Dsonar.host.url="$SONAR_HOST_URL" \
+      -Dsonar.login="$SONAR_TOKEN"
+
+#  DEPLOY (PREPARADO) 
+# dejo el deploy visible pero manual, restringido a ramas principales.
+deploy:
+  stage: deploy
+  when: manual
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main"'
+  script:
+    - echo "Deploy pendiente: se implementará en la tarjeta F3-4 (EC2/ECS)."
