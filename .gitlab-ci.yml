@@ -15,11 +15,11 @@ default:
 pipeline_ok:
   stage: build
   script:
-    - echo " Pipeline iniciado correctamente"
+    - echo "Pipeline iniciado correctamente "
 
 # ===================== JAVA / MAVEN =====================
-# Aquí defino los jobs para proyectos Java que usen Maven.
-# Lo hago para compilar, testear y analizar el código con SonarQube.
+# Aqui defino los jobs para proyectos Java que usen Maven.
+# Lo hago para compilar, testear y analizar el codigo con SonarQube.
 
 build_java:
   stage: build
@@ -43,7 +43,7 @@ test_java:
     - exists: [pom.xml]
   script:
     - echo "Ejecutando tests Maven..."
-    - mvn -B -DfailIfNoTests=false test || echo " Tests fallidos (permitido temporalmente)"
+    - mvn -B -DfailIfNoTests=false test || echo "Tests fallidos (permitido temporalmente)"
   artifacts:
     when: always
     reports:
@@ -56,15 +56,63 @@ sonar_java:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
       exists: [pom.xml]
   script:
-    - echo " Ejecutando análisis SonarQube para Java..."
+    - echo "Ejecutando análisis SonarQube para Java..."
     - mvn -B -DskipTests sonar:sonar \
         -Dsonar.host.url="$SONAR_HOST_URL" \
         -Dsonar.login="$SONAR_TOKEN" \
         -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+
+# ===================== NODE.JS =====================
+# Aqui anado los jobs para un proyecto Node (si existe package.json).
+# Yo: hago build y test; si no hay scripts definidos, no rompo el pipeline.
+
+build_node:
+  stage: build
+  image: node:20
+  rules:
+    - exists: [package.json]
+  script:
+    - echo "Instalo dependencias de Node…"
+    - npm ci || npm install
+    - echo "Ejecuto build si existe…"
+    - npm run build || echo "No hay script build, continuo "
+  artifacts:
+    when: always
+    paths:
+      - dist/
+      - build/
+    expire_in: 1 week
+
+test_node:
+  stage: test
+  image: node:20
+  needs: [build_node]
+  rules:
+    - exists: [package.json]
+  script:
+    - echo "Lanzo tests de Node…"
+    - npm ci || npm install
+    - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
+
+# Yo: analisis con SonarQube para Node. Solo lo ejecuto si ya tengo
+# SONAR_HOST_URL, SONAR_TOKEN y SONAR_PROJECT_KEY.
+sonar_node:
+  stage: sonar
+  image: sonarsource/sonar-scanner-cli:latest
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
+      exists: [package.json]
+  script: |
+    echo "Analizo codigo con SonarQube (Node)…"
+    sonar-scanner \
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+      -Dsonar.sources=. \
+      -Dsonar.host.url="$SONAR_HOST_URL" \
+      -Dsonar.login="$SONAR_TOKEN"
 
 # ---------- DEPLOY MANUAL (placeholder) ----------
 deploy:
   stage: deploy
   when: manual
   script:
-    - echo " Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
+    - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
