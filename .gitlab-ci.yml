@@ -55,15 +55,15 @@ sonar_java:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists: [pom.xml]
   script:
-    - echo "Compilo (sin tests) para generar target/classes en este mismo job"
-    - mvn -B -DskipTests package
-    - echo "Lanzo análisis Sonar (con organización en SonarCloud)"
+    - echo "Ejecutando verify para generar jacoco.xml y clases compiladas"
+    - mvn -B clean verify -DfailIfNoTests=false
+    - echo "Analizando con SonarCloud"
     - >
       mvn -B sonar:sonar
       -Dsonar.host.url="$SONAR_HOST_URL"
       -Dsonar.login="$SONAR_TOKEN"
-      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.organization="$SONAR_ORGANIZATION"
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
 # ===================== NODE.JS =====================
 # Aqui anado los jobs para un proyecto Node (si existe package.json).
