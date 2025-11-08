@@ -1,32 +1,30 @@
-#  STAGES 
+# ========== ETAPAS ==========
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# DEFAULTS 
+# ========== PREAJUSTES ==========
 default:
   retry: 1
   before_script:
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
-# JOB SENTINELA 
+# ========== “PING” DEL PIPELINE ==========
 pipeline_ok:
   stage: build
   script:
-    - echo "Pipeline iniciado correctamente "
+    - echo "Arranco el pipeline correctamente"
 
-
-# JAVA / MAVEN 
-
+# ===================== JAVA / MAVEN =====================
 build_java:
   stage: build
   image: maven:3.9-eclipse-temurin-21
   rules:
     - exists: [pom.xml]
   script:
-    - echo "Compilando proyecto Maven..."
+    - echo "Compilo el proyecto Maven…"
     - mvn -B -DskipTests package
   artifacts:
     when: always
@@ -41,7 +39,7 @@ test_java:
   rules:
     - exists: [pom.xml]
   script:
-    - echo "Ejecutando tests Maven..."
+    - echo "Ejecuto los tests de Maven…"
     - mvn -B -DfailIfNoTests=false -Dmaven.test.failure.ignore=true test
   artifacts:
     when: always
@@ -55,9 +53,9 @@ sonar_java:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists: [pom.xml]
   script:
-    - echo "Ejecutando verify para generar jacoco.xml y clases compiladas"
+    - echo "Genero jacoco.xml y clases compiladas con verify"
     - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
-    - echo "Analizando con SonarCloud"
+    - echo "Lanzo el análisis en SonarCloud"
     - >
       mvn -B sonar:sonar
       -Dsonar.host.url="$SONAR_HOST_URL"
@@ -66,18 +64,17 @@ sonar_java:
       -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
 
-
-# NODE.JS
+# ===================== NODE.JS =====================
 build_node:
   stage: build
   image: node:20
   rules:
     - exists: [package.json]
   script:
-    - echo "Instalo dependencias de Node..."
+    - echo "Instalo dependencias de Node"
     - npm ci || npm install
-    - echo "Ejecuto build si existe..."
-    - npm run build || echo "No hay script build, continuo "
+    - echo "Ejecuto el build si existe"
+    - npm run build || echo "No hay script build, sigo"
   artifacts:
     when: always
     paths:
@@ -92,9 +89,9 @@ test_node:
   rules:
     - exists: [package.json]
   script:
-    - echo "Lanzo tests de Node..."
+    - echo "Lanzo los tests de Node"
     - npm ci || npm install
-    - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
+    - npm test -- --ci || npm test || echo "No tengo tests definidos, sigo"
 
 sonar_node:
   stage: sonar
@@ -103,52 +100,70 @@ sonar_node:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
       exists: [package.json]
   script: |
-    echo "Analizo codigo con SonarQube (Node)..."
+    echo "Analizo el código (Node) en SonarQube…"
     sonar-scanner \
       -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
       -Dsonar.sources=. \
       -Dsonar.host.url="$SONAR_HOST_URL" \
       -Dsonar.login="$SONAR_TOKEN"
 
-# Fase [F3-4] — Deploy automático a EC2 con Docker Compose
+# ========== F3-4 — Hago deploy automático a EC2 con Docker Compose ==========
+# Yo doy por creadas en GitLab las variables:
+#  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
+#  AWS_ECR_URL (X.dkr.ecr.eu-west-1.amazonaws.com)
+#  ECR_REPOSITORY (p.ej. tfg-app)
+#  EC2_HOST / EC2_USER / EC2_SSH_KEY(file) / EC2_KNOWN_HOSTS(opcional)
 
 variables:
-  AWS_REGION: $AWS_REGION
-  ECR_REGISTRY: $AWS_ECR_URL
-  ECR_REPOSITORY: $ECR_REPOSITORY
-  IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
+  ECR_REGISTRY: "$AWS_ECR_URL"
+  IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
 
-#  BUILD & PUSH IMAGEN A ECR 
+# ---------- Construyo y subo la imagen a ECR ----------
 build_and_push:
   stage: build
   image: docker:24
   services: ["docker:24-dind"]
   variables:
-    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
+  rules:
+    - if: '$FORCE_BUILD == "1"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
+      changes:
+        - Dockerfile
+        - app/**/*
+        - docker-compose.yml
   script:
-    - echo "Login en ECR y construcción de imagen..."
+    - echo "Instalo AWS CLI en el runner"
+    - apk add --no-cache python3 py3-pip
+    - pip3 install --no-cache-dir awscli
+    - aws --version
+    - echo "Compruebo/creo el repo ECR ($ECR_REPOSITORY) en $AWS_REGION"
     - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
+    - echo "Hago login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    - docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
-    - docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-    - docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+    - echo "Construyo la imagen Docker"
+    - docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+    - docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+    - echo "Subo la imagen a ECR"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_TAG'
 
-# ---------- DEPLOY AUTOMÁTICO A EC2 ----------
+# ---------- Hago el deploy en EC2 ----------
 deploy_ec2:
   stage: deploy
-  needs: ["build_and_push"]
+  needs:
+    - job: build_and_push
+      optional: true
   image: alpine:3.20
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
   before_script:
     - apk add --no-cache bash curl jq openssh-client unzip
     - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
     - unzip -q awscliv2.zip && ./aws/install && aws --version
-    # preparar SSH (EC2_SSH_KEY tipo File → ruta temporal)
+    # preparo SSH (EC2_SSH_KEY como File -> ruta temporal)
     - mkdir -p ~/.ssh
     - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
     - |
@@ -158,10 +173,12 @@ deploy_ec2:
         ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
       fi
   script:
-    - echo "Iniciando despliegue en EC2..."
-    # 1. Subir/actualizar docker-compose.yml
+    - echo "Inicio el despliegue en EC2"
+    # 0) me aseguro de tener la carpeta remota
+    - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/app'
+    # 1) subo/actualizo docker-compose.yml
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
-    # 2. Ejecutar comandos remotos de despliegue
+    # 2) ejecuto el despliegue remoto
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
         set -e
@@ -170,25 +187,22 @@ deploy_ec2:
         export AWS_REGION="'$AWS_REGION'"
         export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest"
 
-        echo "Login a ECR..."
+        echo "Hago login en ECR desde la instancia"
         aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
 
         cd ~/app
         export IMAGE_URI="$IMAGE_URI"
 
         if ! docker compose version >/dev/null 2>&1; then
-          echo " Docker Compose v2 no está instalado, instálalo en la AMI"; exit 1
+          echo "No tengo Docker Compose v2 instalado en la AMI"; exit 1
         fi
 
-        echo "Descargando nueva imagen y levantando contenedores..."
+        echo "Descargo la nueva imagen y levanto los servicios"
         docker compose pull
         docker compose up -d --remove-orphans
 
-        echo "Limpiando imágenes antiguas..."
+        echo "Limpio imágenes antiguas"
         docker image prune -f
       '
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-    - if: '$CI_COMMIT_TAG'
   environment:
     name: production
