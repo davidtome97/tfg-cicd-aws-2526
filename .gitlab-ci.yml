@@ -1,3 +1,5 @@
+# Pipeline CI/CD completo en GitLab
+
 # ========== ETAPAS ==========
 stages:
   - build
@@ -11,13 +13,18 @@ default:
   before_script:
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
-# ========== “PING” DEL PIPELINE ==========
+cache:
+  key: maven
+  paths:
+    - .m2/repository
+
+# ========== PING DEL PIPELINE ==========
 pipeline_ok:
   stage: build
   script:
     - echo "Arranco el pipeline correctamente"
 
-# ===================== JAVA / MAVEN =====================
+# JAVA / MAVEN
 build_java:
   stage: build
   image: maven:3.9-eclipse-temurin-21
@@ -50,12 +57,15 @@ sonar_java:
   stage: sonar
   image: maven:3.9-eclipse-temurin-21
   rules:
+    # No ejecuto Sonar en pipelines disparados por merge requests (evito el 404)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    # Ejecuto Sonar solo si tengo credenciales y hay pom.xml
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists: [pom.xml]
   script:
-    - echo "Genero jacoco.xml y clases compiladas con verify"
+    - echo "Genero jacoco y analizo con SonarCloud (branch/tag)"
     - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
-    - echo "Lanzo el análisis en SonarCloud"
     - >
       mvn -B sonar:sonar
       -Dsonar.host.url="$SONAR_HOST_URL"
@@ -96,6 +106,7 @@ test_node:
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
+  allow_failure: true
   rules:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
       exists: [package.json]
@@ -107,8 +118,8 @@ sonar_node:
       -Dsonar.host.url="$SONAR_HOST_URL" \
       -Dsonar.login="$SONAR_TOKEN"
 
-# ========== F3-4 — Hago deploy automático a EC2 con Docker Compose ==========
-# Yo doy por creadas en GitLab las variables:
+# Hago deploy automático a EC2 con Docker Compose 
+# Variables esperadas en GitLab:
 #  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
 #  AWS_ECR_URL (X.dkr.ecr.eu-west-1.amazonaws.com)
 #  ECR_REPOSITORY (p.ej. tfg-app)
@@ -118,7 +129,7 @@ variables:
   ECR_REGISTRY: "$AWS_ECR_URL"
   IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
 
-# ---------- Construyo y subo la imagen a ECR ----------
+# Construyo y subo la imagen a ECR
 build_and_push:
   stage: build
   image: docker:24
@@ -150,7 +161,7 @@ build_and_push:
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-# ---------- Hago el deploy en EC2 ----------
+# Hago el deploy en EC2
 deploy_ec2:
   stage: deploy
   needs:
@@ -163,7 +174,7 @@ deploy_ec2:
     - apk add --no-cache bash curl jq openssh-client unzip
     - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
     - unzip -q awscliv2.zip && ./aws/install && aws --version
-    # preparo SSH (EC2_SSH_KEY como File -> ruta temporal)
+    # Preparo SSH (EC2_SSH_KEY como File -> ruta temporal)
     - mkdir -p ~/.ssh
     - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
     - |
