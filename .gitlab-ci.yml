@@ -128,6 +128,7 @@ build_and_push:
     DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   rules:
+    - if: '$FORCE_BUILD == "1"'
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
       changes:
         - Dockerfile
@@ -152,7 +153,9 @@ build_and_push:
 # ---------- Hago el deploy en EC2 ----------
 deploy_ec2:
   stage: deploy
-  needs: ["build_and_push"]
+  needs:
+    - job: build_and_push
+      optional: true
   image: alpine:3.20
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
