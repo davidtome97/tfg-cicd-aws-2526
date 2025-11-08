@@ -1,31 +1,39 @@
-version: '3.8'  # Versión de Docker Compose que estamos utilizando
+version: '3.8'  # Versión de Docker Compose
 
 services:
   db:
     image: postgres:15  # Imagen oficial de PostgreSQL versión 15
-    container_name: postgres-db  # Nombre del contenedor para la base de datos
+    container_name: postgres-db
     environment:
-      POSTGRES_DB: sistemagestion  # Nombre de la base de datos que se va a crear
-      POSTGRES_USER: david         # Usuario de la base de datos
-      POSTGRES_PASSWORD: 1234      # Contraseña del usuario
+      POSTGRES_DB: sistemagestion
+      POSTGRES_USER: david
+      POSTGRES_PASSWORD: 1234
     ports:
-      - "5432:5432"  # Mapeo de puertos: host:contenedor
+      - "5432:5432"  # Puerto local: 5432
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Volumen persistente para los datos de la base de datos
+      - postgres_data:/var/lib/postgresql/data  # Volumen persistente
+    restart: unless-stopped
 
   app:
-    build: app  # Construyo la imagen desde el Dockerfile en el directorio actual
-    container_name: spring-app  # Nombre del contenedor para la aplicación Spring Boot
-    ports:
-      - "8080:8080"  # Mapeo de puertos: host:contenedor
+    container_name: spring-app
+    # Imagen inyectada automáticamente por CI/CD
+    # Si ejecutas localmente, usará :latest (sin romper nada)
+    image: ${IMAGE_URI:-${AWS_ECR_URL}/${ECR_REPOSITORY}:latest}
+
+    # Si trabajas en local y quieres seguir construyendo desde el Dockerfile:
+    # build: app
+
     depends_on:
-      - db  # Indico que este servicio depende de que la base de datos esté disponible
+      - db
+    ports:
+      - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion  # URL de conexión a la base de datos
-      SPRING_DATASOURCE_USERNAME: david  # Usuario que utiliza Spring para conectarse
-      SPRING_DATASOURCE_PASSWORD: 1234  # Contraseña del usuario
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update  # Permite que Hibernate actualice el esquema de la base de datos
-      SPRING_JPA_SHOW_SQL: "true"  # Muestra las consultas SQL por consola
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion
+      SPRING_DATASOURCE_USERNAME: david
+      SPRING_DATASOURCE_PASSWORD: 1234
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "true"
+    restart: unless-stopped
 
 volumes:
-  postgres_data:  # Defino el volumen persistente para los datos de PostgreSQL
+  postgres_data:
