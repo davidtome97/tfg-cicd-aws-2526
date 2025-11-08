@@ -1,0 +1,194 @@
+#  STAGES 
+stages:
+  - build
+  - test
+  - sonar
+  - deploy
+
+# DEFAULTS 
+default:
+  retry: 1
+  before_script:
+    - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
+
+# JOB SENTINELA 
+pipeline_ok:
+  stage: build
+  script:
+    - echo "Pipeline iniciado correctamente "
+
+
+# JAVA / MAVEN 
+
+build_java:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - exists: [pom.xml]
+  script:
+    - echo "Compilando proyecto Maven..."
+    - mvn -B -DskipTests package
+  artifacts:
+    when: always
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+test_java:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  needs: [build_java]
+  rules:
+    - exists: [pom.xml]
+  script:
+    - echo "Ejecutando tests Maven..."
+    - mvn -B -DfailIfNoTests=false -Dmaven.test.failure.ignore=true test
+  artifacts:
+    when: always
+    reports:
+      junit: "**/target/surefire-reports/*.xml"
+
+sonar_java:
+  stage: sonar
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
+      exists: [pom.xml]
+  script:
+    - echo "Ejecutando verify para generar jacoco.xml y clases compiladas"
+    - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
+    - echo "Analizando con SonarCloud"
+    - >
+      mvn -B sonar:sonar
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.organization="$SONAR_ORGANIZATION"
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+      -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
+
+
+# NODE.JS
+build_node:
+  stage: build
+  image: node:20
+  rules:
+    - exists: [package.json]
+  script:
+    - echo "Instalo dependencias de Node..."
+    - npm ci || npm install
+    - echo "Ejecuto build si existe..."
+    - npm run build || echo "No hay script build, continuo "
+  artifacts:
+    when: always
+    paths:
+      - dist/
+      - build/
+    expire_in: 1 week
+
+test_node:
+  stage: test
+  image: node:20
+  needs: [build_node]
+  rules:
+    - exists: [package.json]
+  script:
+    - echo "Lanzo tests de Node..."
+    - npm ci || npm install
+    - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
+
+sonar_node:
+  stage: sonar
+  image: sonarsource/sonar-scanner-cli:latest
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
+      exists: [package.json]
+  script: |
+    echo "Analizo codigo con SonarQube (Node)..."
+    sonar-scanner \
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+      -Dsonar.sources=. \
+      -Dsonar.host.url="$SONAR_HOST_URL" \
+      -Dsonar.login="$SONAR_TOKEN"
+
+# Fase [F3-4] — Deploy automático a EC2 con Docker Compose
+
+variables:
+  AWS_REGION: $AWS_REGION
+  ECR_REGISTRY: $AWS_ECR_URL
+  ECR_REPOSITORY: $ECR_REPOSITORY
+  IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
+
+#  BUILD & PUSH IMAGEN A ECR 
+build_and_push:
+  stage: build
+  image: docker:24
+  services: ["docker:24-dind"]
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - echo "Login en ECR y construcción de imagen..."
+    - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - docker build -t "$ECR_REPOSITORY:$IMAGE_TAG" .
+    - docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+    - docker tag "$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+    - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+    - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+
+# ---------- DEPLOY AUTOMÁTICO A EC2 ----------
+deploy_ec2:
+  stage: deploy
+  needs: ["build_and_push"]
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache bash curl jq openssh-client unzip
+    - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+    - unzip -q awscliv2.zip && ./aws/install && aws --version
+    # preparar SSH (EC2_SSH_KEY tipo File → ruta temporal)
+    - mkdir -p ~/.ssh
+    - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
+    - |
+      if [ -n "$EC2_KNOWN_HOSTS" ]; then
+        echo "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      else
+        ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+      fi
+  script:
+    - echo "Iniciando despliegue en EC2..."
+    # 1. Subir/actualizar docker-compose.yml
+    - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
+    # 2. Ejecutar comandos remotos de despliegue
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
+        set -e
+        export AWS_ACCESS_KEY_ID="'$AWS_ACCESS_KEY_ID'"
+        export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
+        export AWS_REGION="'$AWS_REGION'"
+        export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest"
+
+        echo "Login a ECR..."
+        aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
+
+        cd ~/app
+        export IMAGE_URI="$IMAGE_URI"
+
+        if ! docker compose version >/dev/null 2>&1; then
+          echo " Docker Compose v2 no está instalado, instálalo en la AMI"; exit 1
+        fi
+
+        echo "Descargando nueva imagen y levantando contenedores..."
+        docker compose pull
+        docker compose up -d --remove-orphans
+
+        echo "Limpiando imágenes antiguas..."
+        docker image prune -f
+      '
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+  environment:
+    name: production

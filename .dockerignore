@@ -1,0 +1,10 @@
+.git
+.gitignore
+**/target
+node_modules
+Dockerfile
+docker-compose*.yml
+infra
+docs
+*.md
+AWSCLIV2.pkg
