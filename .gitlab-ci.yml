@@ -171,10 +171,9 @@ deploy_ec2:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
   before_script:
-    - apk add --no-cache bash curl jq openssh-client unzip
-    - curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
-    - unzip -q awscliv2.zip && ./aws/install && aws --version
-    # Preparo SSH (EC2_SSH_KEY como File -> ruta temporal)
+    - apk add --no-cache bash curl jq openssh-client python3 py3-pip
+    - pip3 install --no-cache-dir awscli
+    - aws --version
     - mkdir -p ~/.ssh
     - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
     - |
@@ -185,33 +184,24 @@ deploy_ec2:
       fi
   script:
     - echo "Inicio el despliegue en EC2"
-    # 0) me aseguro de tener la carpeta remota
     - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/app'
-    # 1) subo/actualizo docker-compose.yml
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
-    # 2) ejecuto el despliegue remoto
     - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
         set -e
         export AWS_ACCESS_KEY_ID="'$AWS_ACCESS_KEY_ID'"
         export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
         export AWS_REGION="'$AWS_REGION'"
-        export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest"
-
+        export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest
         echo "Hago login en ECR desde la instancia"
         aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
-
         cd ~/app
-        export IMAGE_URI="$IMAGE_URI"
-
         if ! docker compose version >/dev/null 2>&1; then
           echo "No tengo Docker Compose v2 instalado en la AMI"; exit 1
         fi
-
         echo "Descargo la nueva imagen y levanto los servicios"
         docker compose pull
         docker compose up -d --remove-orphans
-
         echo "Limpio imágenes antiguas"
         docker image prune -f
       '
