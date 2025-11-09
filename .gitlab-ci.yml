@@ -15,14 +15,15 @@ default:
 pipeline_ok:
   stage: build
   script:
-    - echo "Pipeline iniciado correctamente "
+    - echo "Pipeline iniciado correctamente"
 
 # ===================== JAVA / MAVEN =====================
 build_java:
   stage: build
   image: maven:3.9-eclipse-temurin-21
   rules:
-    - exists: [pom.xml]
+    - exists:
+        - pom.xml
   script:
     - echo "Compilando proyecto Maven..."
     - mvn -B -DskipTests package
@@ -37,21 +38,24 @@ test_java:
   image: maven:3.9-eclipse-temurin-21
   needs: [build_java]
   rules:
-    - exists: [pom.xml]
+    - exists:
+        - pom.xml
   script:
     - echo "Ejecutando tests Maven..."
     - mvn -B -DfailIfNoTests=false -Dmaven.test.failure.ignore=true test
   artifacts:
     when: always
     reports:
-      junit: "**/target/surefire-reports/*.xml"
+      junit:
+        - "**/target/surefire-reports/*.xml"
 
 sonar_java:
   stage: sonar
   image: maven:3.9-eclipse-temurin-21
   rules:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
-      exists: [pom.xml]
+      exists:
+        - pom.xml
   script:
     - echo "Ejecutando verify para generar jacoco.xml y clases compiladas"
     - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
@@ -69,12 +73,13 @@ build_node:
   stage: build
   image: node:20
   rules:
-    - exists: [package.json]
+    - exists:
+        - package.json
   script:
     - echo "Instalo dependencias de Node…"
     - npm ci || npm install
     - echo "Ejecuto build si existe…"
-    - npm run build || echo "No hay script build, continuo "
+    - npm run build || echo "No hay script build, continúo"
   artifacts:
     when: always
     paths:
@@ -87,24 +92,27 @@ test_node:
   image: node:20
   needs: [build_node]
   rules:
-    - exists: [package.json]
+    - exists:
+        - package.json
   script:
     - echo "Lanzo tests de Node…"
     - npm ci || npm install
-    - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
+    - npm test -- --ci || npm test || echo "Sin tests definidos, continúo"
 
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
   rules:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
-      exists: [package.json]
-  script: |
-    echo "Analizo codigo con SonarQube (Node)…"
-    sonar-scanner \
-      -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
-      -Dsonar.sources=. \
-      -Dsonar.host.url="$SONAR_HOST_URL" \
+      exists:
+        - package.json
+  script:
+    - echo "Analizo código con SonarQube (Node)…"
+    - >
+      sonar-scanner
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+      -Dsonar.sources=.
+      -Dsonar.host.url="$SONAR_HOST_URL"
       -Dsonar.login="$SONAR_TOKEN"
 
 # ---------- DEPLOY MANUAL (placeholder) ----------
@@ -114,16 +122,17 @@ deploy:
   script:
     - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
 
-# ===================== F3-4 — Build & Push a ECR + Deploy en EC2 =====================
+# ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
 variables:
   ECR_REGISTRY: "$AWS_ECR_URL"
-  IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
 
-# --- F3-4: construyo y subo la imagen a ECR ---
+# --- Build & Push a ECR ---
 build_and_push:
   stage: build
   image: docker:24
-  services: ["docker:24-dind"]
+  services:
+    - docker:24-dind
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -133,15 +142,15 @@ build_and_push:
     - if: '$CI_COMMIT_TAG'
     - when: never
   script:
-    - echo "Instalo AWS CLI en virtualenv (evito PEP 668)"
+    - echo "Instalo dependencias y AWS CLI"
     - apk add --no-cache bash curl jq python3 py3-pip unzip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - aws --version
     - echo "Aseguro repositorio ECR: $ECR_REPOSITORY"
     - |
-      aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 \
-      || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
+      aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || \
+      aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
     - echo "Login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
     - echo "Build de la imagen"
@@ -151,7 +160,7 @@ build_and_push:
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-# --- F3-4: despliegue en EC2 ---
+# --- Deploy en EC2 ---
 deploy_ec2:
   stage: deploy
   image: alpine:3.20
@@ -165,34 +174,48 @@ deploy_ec2:
     - pip install --no-cache-dir awscli
     - aws --version
     - mkdir -p ~/.ssh
-    - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
+    # Soporta EC2_SSH_KEY como File (ruta) o como Variable (contenido)
+    - |
+      if [ -f "$EC2_SSH_KEY" ]; then
+        cp "$EC2_SSH_KEY" ~/.ssh/id_rsa
+      else
+        printf "%s" "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+      fi
+    - chmod 600 ~/.ssh/id_rsa
     - |
       if [ -n "$EC2_KNOWN_HOSTS" ]; then
-        echo "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        printf "%s\n" "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
       else
         ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
       fi
-  script: |
-    echo "Inicio despliegue en EC2"
-    ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/app'
-    scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
-    ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
+  script:
+    - echo "Inicio despliegue en EC2"
+    - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+    - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
+    # Usamos comillas dobles para expandir variables locales dentro del bloque remoto:
+    - >
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
       set -e
-      export AWS_ACCESS_KEY_ID="'$AWS_ACCESS_KEY_ID'"
-      export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
-      export AWS_REGION="'$AWS_REGION'"
-      export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest
-      echo "Login en ECR desde la instancia"
-      aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
+      export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      export AWS_REGION=${AWS_REGION}
+      export IMAGE_URI=${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
+
+      echo 'Login en ECR desde la instancia'
+      aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
       cd ~/app
       if ! docker compose version >/dev/null 2>&1; then
-        echo "ERROR: falta Docker Compose v2 en la AMI"; exit 1
+        echo 'ERROR: falta Docker Compose v2 en la AMI'
+        exit 1
       fi
-      echo "Actualizo servicios con la nueva imagen"
+
+      echo 'Actualizo servicios con la nueva imagen'
       docker compose pull
       docker compose up -d --remove-orphans
-      echo "Limpio imágenes antiguas"
+
+      echo 'Limpio imágenes antiguas'
       docker image prune -f
-    '
+      "
   environment:
     name: production
