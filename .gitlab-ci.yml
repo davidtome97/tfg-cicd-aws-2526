@@ -1,37 +1,33 @@
-# Pipeline CI/CD completo en GitLab
-
-# ========== ETAPAS ==========
+# ---------- STAGES ----------
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# ========== PREAJUSTES ==========
+# ---------- DEFAULTS ----------
 default:
   retry: 1
   before_script:
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
-cache:
-  key: maven
-  paths:
-    - .m2/repository
-
-# ========== PING DEL PIPELINE ==========
+# ---------- JOB SENTINELA ----------
 pipeline_ok:
   stage: build
   script:
-    - echo "Arranco el pipeline correctamente"
+    - echo "Pipeline iniciado correctamente "
 
-# JAVA / MAVEN
+# ===================== JAVA / MAVEN =====================
+# Aqui defino los jobs para proyectos Java que usen Maven.
+# Lo hago para compilar, testear y analizar el codigo con SonarQube.
+
 build_java:
   stage: build
   image: maven:3.9-eclipse-temurin-21
   rules:
     - exists: [pom.xml]
   script:
-    - echo "Compilo el proyecto Maven…"
+    - echo "Compilando proyecto Maven..."
     - mvn -B -DskipTests package
   artifacts:
     when: always
@@ -46,7 +42,7 @@ test_java:
   rules:
     - exists: [pom.xml]
   script:
-    - echo "Ejecuto los tests de Maven…"
+    - echo "Ejecutando tests Maven..."
     - mvn -B -DfailIfNoTests=false -Dmaven.test.failure.ignore=true test
   artifacts:
     when: always
@@ -57,15 +53,12 @@ sonar_java:
   stage: sonar
   image: maven:3.9-eclipse-temurin-21
   rules:
-    # No ejecuto Sonar en pipelines disparados por merge requests (evito el 404)
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: never
-    # Ejecuto Sonar solo si tengo credenciales y hay pom.xml
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists: [pom.xml]
   script:
-    - echo "Genero jacoco y analizo con SonarCloud (branch/tag)"
+    - echo "Ejecutando verify para generar jacoco.xml y clases compiladas"
     - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
+    - echo "Analizando con SonarCloud"
     - >
       mvn -B sonar:sonar
       -Dsonar.host.url="$SONAR_HOST_URL"
@@ -73,18 +66,20 @@ sonar_java:
       -Dsonar.organization="$SONAR_ORGANIZATION"
       -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
-
 # ===================== NODE.JS =====================
+# Aqui anado los jobs para un proyecto Node (si existe package.json).
+# Yo: hago build y test; si no hay scripts definidos, no rompo el pipeline.
+
 build_node:
   stage: build
   image: node:20
   rules:
     - exists: [package.json]
   script:
-    - echo "Instalo dependencias de Node"
+    - echo "Instalo dependencias de Node…"
     - npm ci || npm install
-    - echo "Ejecuto el build si existe"
-    - npm run build || echo "No hay script build, sigo"
+    - echo "Ejecuto build si existe…"
+    - npm run build || echo "No hay script build, continuo "
   artifacts:
     when: always
     paths:
@@ -99,85 +94,96 @@ test_node:
   rules:
     - exists: [package.json]
   script:
-    - echo "Lanzo los tests de Node"
+    - echo "Lanzo tests de Node…"
     - npm ci || npm install
-    - npm test -- --ci || npm test || echo "No tengo tests definidos, sigo"
+    - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
 
+# Yo: analisis con SonarQube para Node. Solo lo ejecuto si ya tengo
+# SONAR_HOST_URL, SONAR_TOKEN y SONAR_PROJECT_KEY.
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
-  allow_failure: true
   rules:
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY'
       exists: [package.json]
   script: |
-    echo "Analizo el código (Node) en SonarQube…"
+    echo "Analizo codigo con SonarQube (Node)…"
     sonar-scanner \
       -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
       -Dsonar.sources=. \
       -Dsonar.host.url="$SONAR_HOST_URL" \
       -Dsonar.login="$SONAR_TOKEN"
 
-# Hago deploy automático a EC2 con Docker Compose 
-# Variables esperadas en GitLab:
-#  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
-#  AWS_ECR_URL (X.dkr.ecr.eu-west-1.amazonaws.com)
-#  ECR_REPOSITORY (p.ej. tfg-app)
-#  EC2_HOST / EC2_USER / EC2_SSH_KEY(file) / EC2_KNOWN_HOSTS(opcional)
+# ---------- DEPLOY MANUAL (placeholder) ----------
+deploy:
+  stage: deploy
+  when: manual
+  script:
+    - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
+
+  # ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
+  # Variables que espero tener en GitLab (Settings → CI/CD → Variables):
+  #  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION
+  #  AWS_ECR_URL        (p.ej. 123456789012.dkr.ecr.eu-west-1.amazonaws.com)
+  #  ECR_REPOSITORY     (p.ej. tfg-app)
+  #  EC2_HOST / EC2_USER
+  #  EC2_SSH_KEY (tipo File) / EC2_KNOWN_HOSTS (opcional)
 
 variables:
   ECR_REGISTRY: "$AWS_ECR_URL"
   IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
 
-# Construyo y subo la imagen a ECR
+# --- F3-4: construyo y subo la imagen a ECR ---
 build_and_push:
   stage: build
   image: docker:24
-  services: ["docker:24-dind"]
+  services: [ "docker:24-dind" ]
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   rules:
-    - if: '$FORCE_BUILD == "1"'
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
-      changes:
-        - Dockerfile
-        - app/**/*
-        - docker-compose.yml
+    # Yo: solo construyo cuando voy a desplegar (push a main o tag)
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
   script:
-    - echo "Instalo AWS CLI en el runner"
-    - apk add --no-cache python3 py3-pip
-    - pip3 install --no-cache-dir awscli
+    - echo "Instalo AWS CLI en virtualenv (evito PEP 668)"
+    - apk add --no-cache bash curl jq python3 py3-pip unzip
+    - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
+    - pip install --no-cache-dir awscli
     - aws --version
-    - echo "Compruebo/creo el repo ECR ($ECR_REPOSITORY) en $AWS_REGION"
-    - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
-    - echo "Hago login en ECR"
+
+    - echo "Aseguro repositorio ECR: $ECR_REPOSITORY"
+    - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 \
+      || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
+
+    - echo "Login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    - echo "Construyo la imagen Docker"
+
+    - echo "Build de la imagen"
     - docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
     - docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-    - echo "Subo la imagen a ECR"
+
+    - echo "Push de la imagen"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-# Hago el deploy en EC2
+# --- F3-4: despliegue en EC2 (tras terminar los stages previos) ---
 deploy_ec2:
   stage: deploy
-  needs:
-    - job: build_and_push
-      optional: true
   image: alpine:3.20
   rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_TAG'
+    # Yo: solo despliego en push a main o en tags; nunca en MRs.
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
   before_script:
     - apk add --no-cache bash curl jq openssh-client python3 py3-pip
-    # AWS CLI en virtualenv (evita PEP 668)
-    - python3 -m venv /tmp/awscli
-    - . /tmp/awscli/bin/activate
+    - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - aws --version
-    # SSH
+    # SSH listo
     - mkdir -p ~/.ssh
     - cp "$EC2_SSH_KEY" ~/.ssh/id_rsa && chmod 600 ~/.ssh/id_rsa
     - |
@@ -186,32 +192,34 @@ deploy_ec2:
       else
         ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
       fi
-  script:
-    - echo "Inicio el despliegue en EC2"
-    - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/app'
-    - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
-    - |
-      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
-        set -e
-        export AWS_ACCESS_KEY_ID="'$AWS_ACCESS_KEY_ID'"
-        export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
-        export AWS_REGION="'$AWS_REGION'"
-        export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest
+  script: |
+    echo "Inicio despliegue en EC2"
+    # 0) carpeta remota
+    ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} 'mkdir -p ~/app'
+    # 1) subo/actualizo el compose
+    scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml
+    # 2) ejecuto despliegue
+    ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${EC2_USER}@${EC2_HOST} '
+      set -e
+      export AWS_ACCESS_KEY_ID="'$AWS_ACCESS_KEY_ID'"
+      export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
+      export AWS_REGION="'$AWS_REGION'"
+      export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest
 
-        echo "Hago login en ECR desde la instancia"
-        aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
+      echo "Login en ECR desde la instancia"
+      aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
 
-        cd ~/app
-        if ! docker compose version >/dev/null 2>&1; then
-          echo "No tengo Docker Compose v2 instalado en la AMI"; exit 1
-        fi
+      cd ~/app
+      if ! docker compose version >/dev/null 2>&1; then
+        echo "ERROR: falta Docker Compose v2 en la AMI"; exit 1
+      fi
 
-        echo "Descargo la nueva imagen y levanto los servicios"
-        docker compose pull
-        docker compose up -d --remove-orphans
+      echo "Actualizo servicios con la nueva imagen"
+      docker compose pull
+      docker compose up -d --remove-orphans
 
-        echo "Limpio imágenes antiguas"
-        docker image prune -f
-      '
+      echo "Limpio imágenes antiguas"
+      docker image prune -f
+    '
   environment:
     name: production
