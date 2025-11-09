@@ -18,9 +18,6 @@ pipeline_ok:
     - echo "Pipeline iniciado correctamente "
 
 # ===================== JAVA / MAVEN =====================
-# Aqui defino los jobs para proyectos Java que usen Maven.
-# Lo hago para compilar, testear y analizar el codigo con SonarQube.
-
 build_java:
   stage: build
   image: maven:3.9-eclipse-temurin-21
@@ -66,10 +63,8 @@ sonar_java:
       -Dsonar.organization="$SONAR_ORGANIZATION"
       -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
-# ===================== NODE.JS =====================
-# Aqui anado los jobs para un proyecto Node (si existe package.json).
-# Yo: hago build y test; si no hay scripts definidos, no rompo el pipeline.
 
+# ===================== NODE.JS =====================
 build_node:
   stage: build
   image: node:20
@@ -98,8 +93,6 @@ test_node:
     - npm ci || npm install
     - npm test -- --ci || npm test || echo "Sin tests definidos, continuo "
 
-# Yo: analisis con SonarQube para Node. Solo lo ejecuto si ya tengo
-# SONAR_HOST_URL, SONAR_TOKEN y SONAR_PROJECT_KEY.
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
@@ -121,8 +114,7 @@ deploy:
   script:
     - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
 
-# ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
-# Variables globales
+# ===================== F3-4 — Build & Push a ECR + Deploy en EC2 =====================
 variables:
   ECR_REGISTRY: "$AWS_ECR_URL"
   IMAGE_TAG: "${CI_COMMIT_SHORT_SHA}"
@@ -139,24 +131,22 @@ build_and_push:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
+    - when: never
   script:
     - echo "Instalo AWS CLI en virtualenv (evito PEP 668)"
     - apk add --no-cache bash curl jq python3 py3-pip unzip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - aws --version
-
     - echo "Aseguro repositorio ECR: $ECR_REPOSITORY"
-    - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 \
+    - |
+      aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 \
       || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
-
     - echo "Login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-
     - echo "Build de la imagen"
     - docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
     - docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
-
     - echo "Push de la imagen"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
@@ -168,6 +158,7 @@ deploy_ec2:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
+    - when: never
   before_script:
     - apk add --no-cache bash curl jq openssh-client python3 py3-pip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
@@ -191,19 +182,15 @@ deploy_ec2:
       export AWS_SECRET_ACCESS_KEY="'$AWS_SECRET_ACCESS_KEY'"
       export AWS_REGION="'$AWS_REGION'"
       export IMAGE_URI="'$ECR_REGISTRY'/'$ECR_REPOSITORY':latest
-
       echo "Login en ECR desde la instancia"
       aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "'$ECR_REGISTRY'"
-
       cd ~/app
       if ! docker compose version >/dev/null 2>&1; then
         echo "ERROR: falta Docker Compose v2 en la AMI"; exit 1
       fi
-
       echo "Actualizo servicios con la nueva imagen"
       docker compose pull
       docker compose up -d --remove-orphans
-
       echo "Limpio imágenes antiguas"
       docker image prune -f
     '
