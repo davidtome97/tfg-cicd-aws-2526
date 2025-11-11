@@ -226,17 +226,16 @@ deploy_ec2:
       fi
   script:
     - echo "Inicio despliegue en EC2"
-    # Creo el directorio remoto de la app si no existe.
     - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
-    # Copio el docker-compose al servidor.
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
-    # Ejecuto la actualización de servicios.
     - >
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
       set -e
       export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       export AWS_REGION=${AWS_REGION}
+      export ECR_REGISTRY=${ECR_REGISTRY}
+      export ECR_REPOSITORY=${ECR_REPOSITORY}
       export IMAGE_URI=${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
 
       echo 'Login en ECR desde la instancia'
