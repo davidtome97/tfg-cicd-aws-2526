@@ -1,14 +1,17 @@
 # ---------- PIPELINE SCOPE ----------
 workflow:
   rules:
-    # Ejecuta CI en Merge Requests (build/test/sonar)
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # Ejecuta en pushes normales a ramas
-    - if: $CI_COMMIT_BRANCH
-    # Por defecto no ejecutar
+    # Aquí defino las reglas de cuándo se ejecuta la pipeline.
+    # La primera hace que se ejecute automáticamente cuando abro un Merge Request (para verificar build, test y sonar).
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    # Esta regla permite que la pipeline se ejecute también con cualquier push a una rama.
+    - if: '$CI_COMMIT_BRANCH'
+    # Si no se cumple ninguna condición anterior, no ejecuto nada por defecto.
     - when: never
 
 # ---------- STAGES ----------
+# En este bloque defino las etapas principales de mi pipeline.
+# Cada job pertenece a uno de estos stages.
 stages:
   - build
   - test
@@ -16,37 +19,42 @@ stages:
   - deploy
 
 # ---------- DEFAULTS ----------
+# Aquí configuro valores comunes para todos los jobs.
 default:
-  retry: 1
+  retry: 1   # Si un job falla por error puntual, se reintenta una vez automáticamente.
   before_script:
+    # Este comando se ejecuta al inicio de todos los jobs y me sirve para saber en qué rama y commit estoy.
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
 # ---------- JOB SENTINELA ----------
+# Este job lo uso como verificación inicial para asegurarme de que la pipeline arranca correctamente.
 pipeline_ok:
   stage: build
   script:
     - echo "Pipeline iniciado correctamente"
 
 # ===================== JAVA / MAVEN =====================
+# Aquí configuro los jobs específicos para proyectos Java que usen Maven.
 build_java:
   stage: build
-  image: maven:3.9-eclipse-temurin-21
+  image: maven:3.9-eclipse-temurin-21  # Uso una imagen con Maven y Java 21 ya preinstalados.
   rules:
     - exists:
-        - pom.xml
+        - pom.xml   # Solo ejecuto este job si detecto el archivo pom.xml.
   script:
     - echo "Compilando proyecto Maven..."
-    - mvn -B -DskipTests package
+    - mvn -B -DskipTests package  # Compilo el proyecto pero salto los tests para ahorrar tiempo en esta fase.
   artifacts:
     when: always
     paths:
-      - target/*.jar
+      - target/*.jar  # Guardo los artefactos generados (.jar) para usarlos más adelante.
     expire_in: 1 week
 
+# En este job ejecuto los tests automáticos de Maven.
 test_java:
   stage: test
   image: maven:3.9-eclipse-temurin-21
-  needs: [build_java]
+  needs: [build_java]  # Este job depende del anterior.
   rules:
     - exists:
         - pom.xml
@@ -57,12 +65,14 @@ test_java:
     when: always
     reports:
       junit:
-        - "**/target/surefire-reports/*.xml"
+        - "**/target/surefire-reports/*.xml"  # Guardo los reportes JUnit para análisis posterior.
 
+# Este job realiza el análisis de calidad de código con SonarCloud.
 sonar_java:
   stage: sonar
   image: maven:3.9-eclipse-temurin-21
   rules:
+    # Solo ejecuto el análisis si tengo configuradas todas las variables de Sonar.
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION'
       exists:
         - pom.xml
@@ -79,12 +89,13 @@ sonar_java:
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
 
 # ===================== NODE.JS =====================
+# A partir de aquí defino los jobs equivalentes pero para proyectos Node.js.
 build_node:
   stage: build
   image: node:20
   rules:
     - exists:
-        - package.json
+        - package.json  # Solo se ejecuta si existe este archivo.
   script:
     - echo "Instalo dependencias de Node…"
     - npm ci || npm install
@@ -109,6 +120,7 @@ test_node:
     - npm ci || npm install
     - npm test -- --ci || npm test || echo "Sin tests definidos, continúo"
 
+# Este job analiza el código de Node.js con SonarCloud.
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
@@ -125,7 +137,8 @@ sonar_node:
       -Dsonar.host.url="$SONAR_HOST_URL"
       -Dsonar.login="$SONAR_TOKEN"
 
-# ---------- DEPLOY MANUAL (placeholder) ----------
+# ---------- DEPLOY MANUAL ----------
+# Este job sirve como marcador para la fase de despliegue. En esta etapa lo dejo manual.
 deploy:
   stage: deploy
   when: manual
@@ -134,20 +147,22 @@ deploy:
 
 # ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
 variables:
-  ECR_REGISTRY: "$AWS_ECR_URL"
-  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  ECR_REGISTRY: "$AWS_ECR_URL"       # Registro de ECR de AWS.
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"  # Uso el hash del commit como tag de imagen.
 
 # --- Build & Push a ECR ---
+# En este job preparo la imagen Docker y la subo a AWS ECR.
 build_and_push:
   stage: build
   image: docker:24
   services:
-    - docker:24-dind
+    - docker:24-dind  # Activo Docker-in-Docker para poder construir imágenes dentro del job.
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   rules:
+    # Solo ejecuto este job en pushes a main o cuando hay tags.
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
     - when: never
@@ -158,9 +173,8 @@ build_and_push:
     - pip install --no-cache-dir awscli
     - aws --version
     - echo "Aseguro repositorio ECR: $ECR_REPOSITORY"
-    - |
-      aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || \
-      aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
+    # Con este comando verifico si el repositorio existe y si no, lo creo.
+    - bash -lc 'aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null'
     - echo "Login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
     - echo "Build de la imagen"
@@ -171,6 +185,7 @@ build_and_push:
     - docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
 # --- Deploy en EC2 ---
+# En este último job realizo el despliegue remoto en mi instancia EC2.
 deploy_ec2:
   stage: deploy
   image: alpine:3.20
@@ -184,7 +199,7 @@ deploy_ec2:
     - pip install --no-cache-dir awscli
     - aws --version
     - mkdir -p ~/.ssh
-    # Soporta EC2_SSH_KEY como File (ruta) o como Variable (contenido)
+    # Aquí preparo la clave SSH. Si está como variable, la escribo; si es un archivo, la copio.
     - |
       if [ -f "$EC2_SSH_KEY" ]; then
         cp "$EC2_SSH_KEY" ~/.ssh/id_rsa
@@ -192,6 +207,7 @@ deploy_ec2:
         printf "%s" "$EC2_SSH_KEY" > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
+    # Si tengo la huella del host EC2 guardada la uso, si no, la obtengo con ssh-keyscan.
     - |
       if [ -n "$EC2_KNOWN_HOSTS" ]; then
         printf "%s\n" "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
@@ -200,9 +216,11 @@ deploy_ec2:
       fi
   script:
     - echo "Inicio despliegue en EC2"
+    # Primero creo el directorio remoto donde estará mi aplicación.
     - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+    # Copio el archivo docker-compose.yml al servidor remoto.
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
-    # Usamos comillas dobles para expandir variables locales dentro del bloque remoto:
+    # A continuación, ejecuto comandos directamente en el servidor EC2.
     - >
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
       set -e
@@ -228,4 +246,4 @@ deploy_ec2:
       docker image prune -f
       "
   environment:
-    name: production
+    name: production  # Indico que este despliegue corresponde al entorno de producción.
