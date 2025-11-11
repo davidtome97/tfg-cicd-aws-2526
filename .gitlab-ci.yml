@@ -1,3 +1,13 @@
+# ---------- PIPELINE SCOPE ----------
+workflow:
+  rules:
+    # Ejecuta CI en Merge Requests (build/test/sonar)
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Ejecuta en pushes normales a ramas
+    - if: $CI_COMMIT_BRANCH
+    # Por defecto no ejecutar
+    - when: never
+
 # ---------- STAGES ----------
 stages:
   - build
