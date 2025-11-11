@@ -182,11 +182,7 @@ build_and_push:
     - pip install --no-cache-dir awscli
     - export PATH="/tmp/awscli/bin:$PATH"   # me aseguro de que cualquier subshell herede aws en el PATH
     - aws --version
-
-    # Aseguro que el repositorio existe en ECR; no uso 'bash -lc' para no perder el venv
-    - echo "Compruebo/creo repo ECR: $ECR_REPOSITORY"
     - aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 || aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null
-
     - echo "Login en ECR"
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
