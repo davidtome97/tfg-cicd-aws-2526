@@ -18,6 +18,11 @@ stages:
   - sonar
   - deploy
 
+# ========== VARIABLES GLOBALES (FASE 3-4) ==========
+variables:
+  ECR_REGISTRY: "$AWS_ECR_URL"
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+
 # ---------- DEFAULTS ----------
 # Valores comunes a todos los jobs.
 default:
@@ -157,17 +162,14 @@ deploy:
     - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
 
 # ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
-variables:
-  ECR_REGISTRY: "$AWS_ECR_URL"       # Mi registro ECR en AWS.
-  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"  # Etiqueto la imagen con el short SHA.
 
-# --- Build & Push a ECR ---
-# Construyo la imagen y la subo a ECR solo en main/tags.
 # --- Build & Push a ECR ---
 build_and_push:
   stage: build
   image: docker:24
-  services: [docker:24-dind]
+  services:
+    - name: docker:24-dind
+      privileged: true
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
@@ -177,34 +179,36 @@ build_and_push:
     - if: '$CI_COMMIT_TAG'
     - when: never
   script:
-    - echo "Instalo dependencias + AWS CLI (venv)"
+    - echo "Instalo AWS CLI"
     - apk add --no-cache bash curl jq python3 py3-pip unzip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - export PATH="/tmp/awscli/bin:$PATH"
     - aws --version
 
-    # Normalizo el registry (sin protocolo ni barra final)
+    # Normalizo registry
     - REGISTRY_NO_PROTO="${ECR_REGISTRY#https://}"
     - REGISTRY_HOST="${REGISTRY_NO_PROTO%/}"
 
-    # Creo el repositorio si no existe (idempotente y sin romper el job)
+    # Creo repo si no existe (sin romper el job)
     - |
-      echo "Verifico/creo repo ECR: ${ECR_REPOSITORY} (${AWS_REGION})"
-      if ! aws ecr describe-repositories --repository-names "${ECR_REPOSITORY}" --region "${AWS_REGION}" >/dev/null 2>&1; then
-        aws ecr create-repository --repository-name "${ECR_REPOSITORY}" --region "${AWS_REGION}" >/dev/null 2>&1 || true
+      echo "Verifico repositorio ECR..."
+      if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
+        aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" || true
       fi
 
-    # Login en ECR (host limpio)
-    - aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY_HOST}"
+    # Login limpio
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY_HOST"
 
-    # Build, tag y push
-    - docker build -t "${REGISTRY_HOST}/${ECR_REPOSITORY}:${IMAGE_TAG}" .
-    - docker tag "${REGISTRY_HOST}/${ECR_REPOSITORY}:${IMAGE_TAG}" "${REGISTRY_HOST}/${ECR_REPOSITORY}:latest"
-    - docker push "${REGISTRY_HOST}/${ECR_REPOSITORY}:${IMAGE_TAG}"
-    - docker push "${REGISTRY_HOST}/${ECR_REPOSITORY}:latest"
+    # Build + tag
+    - docker build -t "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" .
+    - docker tag "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
 
-# --- Deploy en EC2 ---
+    # Push
+    - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG"
+    - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
+
+# --- DEPLOY EC2 ---
 deploy_ec2:
   stage: deploy
   image: alpine:3.20
@@ -212,13 +216,15 @@ deploy_ec2:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
     - when: never
+
   before_script:
     - apk add --no-cache bash curl jq openssh-client python3 py3-pip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - aws --version
+
+    # SSH key
     - mkdir -p ~/.ssh
-    # Clave SSH
     - |
       if [ -f "$EC2_SSH_KEY" ]; then
         cp "$EC2_SSH_KEY" ~/.ssh/id_rsa
@@ -226,6 +232,7 @@ deploy_ec2:
         printf "%s" "$EC2_SSH_KEY" > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
+
     # known_hosts
     - |
       if [ -n "$EC2_KNOWN_HOSTS" ]; then
@@ -233,39 +240,38 @@ deploy_ec2:
       else
         ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
       fi
+
   script:
     - echo "Inicio despliegue en EC2"
+
     - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
-    - >
+
+    - |
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
       set -e
+
       export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'
       export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'
       export AWS_REGION='${AWS_REGION}'
       export ECR_REGISTRY='${ECR_REGISTRY}'
       export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-      # Normalizo el registry en la instancia
+      # Normalizo registry en la instancia
       REGISTRY_NO_PROTO=\"\${ECR_REGISTRY#https://}\"
       REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
       export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
 
-      echo 'Login en ECR desde la instancia'
-      aws ecr get-login-password --region \"${AWS_REGION}\" | docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
+      echo 'Login en ECR'
+      aws ecr get-login-password --region \"${AWS_REGION}\" \
+          | docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
 
       cd ~/app
-      if ! docker compose version >/dev/null 2>&1; then
-        echo 'ERROR: falta Docker Compose v2 en la AMI'
-        exit 1
-      fi
-
-      echo 'Actualizo servicios con la nueva imagen'
       docker compose pull
       docker compose up -d --remove-orphans
-
-      echo 'Limpio imágenes antiguas'
       docker image prune -f
       "
+
   environment:
     name: production
