@@ -162,14 +162,13 @@ deploy:
     - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
 
 # ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
-
 # --- Build & Push a ECR ---
 build_and_push:
   stage: build
   image: docker:24
   services:
-    - name: docker:24-dind
-      privileged: true
+    - docker:24-dind
+  privileged: true
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
