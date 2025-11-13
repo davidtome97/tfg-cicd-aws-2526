@@ -1,31 +1,42 @@
-version: '3.8'  # Versión de Docker Compose que estamos utilizando
+version: '3.8'
 
 services:
   db:
-    image: postgres:15  # Imagen oficial de PostgreSQL versión 15
-    container_name: postgres-db  # Nombre del contenedor para la base de datos
+    image: postgres:15
+    container_name: postgres-db
     environment:
-      POSTGRES_DB: sistemagestion  # Nombre de la base de datos que se va a crear
-      POSTGRES_USER: david         # Usuario de la base de datos
-      POSTGRES_PASSWORD: 1234      # Contraseña del usuario
+      POSTGRES_DB: sistemagestion
+      POSTGRES_USER: david
+      POSTGRES_PASSWORD: 1234
     ports:
-      - "5432:5432"  # Mapeo de puertos: host:contenedor
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Volumen persistente para los datos de la base de datos
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
   app:
-    build: .  # Construyo la imagen desde el Dockerfile en el directorio actual
-    container_name: spring-app  # Nombre del contenedor para la aplicación Spring Boot
-    ports:
-      - "8080:8080"  # Mapeo de puertos: host:contenedor
+    # Aquí ya no construyo la imagen localmente; ahora uso directamente la imagen
+    # que yo mismo subo a ECR desde la pipeline.
+    # En el despliegue, exporto IMAGE_URI con el valor real del repositorio ECR.
+    image: "${IMAGE_URI}"
+    container_name: spring-app
     depends_on:
-      - db  # Indico que este servicio depende de que la base de datos esté disponible
+      - db
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion  # URL de conexión a la base de datos
-      SPRING_DATASOURCE_USERNAME: david  # Usuario que utiliza Spring para conectarse
-      SPRING_DATASOURCE_PASSWORD: 1234  # Contraseña del usuario
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update  # Permite que Hibernate actualice el esquema de la base de datos
-      SPRING_JPA_SHOW_SQL: "true"  # Muestra las consultas SQL por consola
+      # Configuro mi aplicación Spring Boot para que se conecte al
+      # contenedor de PostgreSQL que levanto aquí mismo.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion
+      SPRING_DATASOURCE_USERNAME: david
+      SPRING_DATASOURCE_PASSWORD: 1234
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "true"
+      # Si quisiera activar un perfil de Spring para producción, lo haría aquí:
+      # SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
+    # Si estoy usando Docker Compose v2.20+ puedo forzar siempre un pull de la imagen.
+    # pull_policy: always
+    restart: unless-stopped
 
 volumes:
-  postgres_data:  # Defino el volumen persistente para los datos de PostgreSQL
+  postgres_data:
