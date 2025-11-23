@@ -13,23 +13,22 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Compilando proyecto Java..."
-                sh "mvn -B clean package"
+                sh "chmod +x mvnw"
+                sh "./mvnw -B clean package"
             }
         }
 
         stage('Test') {
             steps {
                 echo "Ejecutando tests..."
-                sh "mvn test"
+                sh "./mvnw test"
             }
         }
 
-        // Si quieres activar SonarCloud:
         // stage('SonarQube') {
         //     steps {
-        //         withSonarQubeEnv('SonarCloud') {
-        //             sh "mvn sonar:sonar"
-        //         }
+        //         echo "Analizando código con SonarQube..."
+        //         sh "./mvnw sonar:sonar"
         //     }
         // }
 
