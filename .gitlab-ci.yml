@@ -1,65 +1,62 @@
 # ---------- PIPELINE SCOPE ----------
 workflow:
   rules:
-    # Defino cuándo se dispara la pipeline.
-    # Quiero que se ejecute también en MRs para validar build y test, pero OJO:
-    # he movido Sonar para que NO corra en MRs (ver jobs sonar_* abajo).
+    # Ejecutar en MRs (si el usuario lo ha activado)
+
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    # Y también cuando hago push a cualquier rama (build/test siempre).
+
+    # Ejecutar cuando haya push a cualquier rama
     - if: '$CI_COMMIT_BRANCH'
-    # Si nada aplica, no ejecuto nada.
+    # Si nada aplica, no ejecuto nada
     - when: never
 
 # ---------- STAGES ----------
-# Declaro los stages de mi pipeline (cada job cae en uno de estos).
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# ========== VARIABLES GLOBALES (FASE 3-4) ==========
+# ========== VARIABLES GLOBALES (AWS / ECR) ==========
 variables:
-  ECR_REGISTRY: "$AWS_ECR_URL"
   IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
 
+  ECR_REGISTRY: "$AWS_ECR_URL"
+  ECR_REPOSITORY: "$ECR_REPOSITORY"
+
+
 # ---------- DEFAULTS ----------
-# Valores comunes a todos los jobs.
 default:
-  retry: 1   # Si falla por algo puntual, reintento una vez.
+  retry: 1
   before_script:
-    # Me imprime rama y commit para orientarme en logs.
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
 # ---------- JOB SENTINELA ----------
-# Pequeño “ping” para ver que arranca todo.
 pipeline_ok:
   stage: build
   script:
     - echo "Pipeline iniciado correctamente"
 
 # ===================== JAVA / MAVEN =====================
-# Compilo proyectos Java con Maven.
 build_java:
   stage: build
-  image: maven:3.9-eclipse-temurin-21  # Lleva Maven + Java 21.
+  image: maven:3.9-eclipse-temurin-21
   rules:
     - exists:
-        - pom.xml   # Solo si hay pom.xml.
+        - pom.xml
   script:
     - echo "Compilando proyecto Maven..."
-    - mvn -B -DskipTests package  # Compilo sin tests aquí para ir rápido.
+    - mvn -B -DskipTests package
   artifacts:
     when: always
     paths:
-      - target/*.jar  # Guardo el JAR para stages posteriores.
+      - target/*.jar
     expire_in: 1 week
 
-# Aquí ya lanzo los tests de Maven.
 test_java:
   stage: test
   image: maven:3.9-eclipse-temurin-21
-  needs: [build_java]  # Depende de build_java.
+  needs: [build_java]
   rules:
     - exists:
         - pom.xml
@@ -70,19 +67,19 @@ test_java:
     when: always
     reports:
       junit:
-        - "**/target/surefire-reports/*.xml"  # Subo los JUnit para el informe.
+        - "**/target/surefire-reports/*.xml"
 
-# Análisis de calidad con SonarCloud para Java.
-# IMPORTANTE: he decidido NO ejecutar Sonar en MRs para evitar el 404 de "PR Decoration".
-# Solo analizo en pushes a develop/main y en tags.
+# ===================== SONAR JAVA =====================
+
 sonar_java:
   stage: sonar
   image: maven:3.9-eclipse-temurin-21
   rules:
-    # Solo si hay variables de Sonar y es push a develop/main o es un tag.
+    # Solo si hay variables de Sonar y es push a develop/main
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION && $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
       exists:
         - pom.xml
+    # O si es tag
     - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION && $CI_COMMIT_TAG'
       exists:
         - pom.xml
@@ -99,14 +96,14 @@ sonar_java:
       -Dsonar.projectKey="$SONAR_PROJECT_KEY"
       -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
 
+
 # ===================== NODE.JS =====================
-# Build para Node.js.
 build_node:
   stage: build
   image: node:20
   rules:
     - exists:
-        - package.json  # Solo si hay Node.
+        - package.json
   script:
     - echo "Instalo dependencias de Node…"
     - npm ci || npm install
@@ -119,7 +116,6 @@ build_node:
       - build/
     expire_in: 1 week
 
-# Tests de Node.js.
 test_node:
   stage: test
   image: node:20
@@ -132,7 +128,7 @@ test_node:
     - npm ci || npm install
     - npm test -- --ci || npm test || echo "Sin tests definidos, continúo"
 
-# Análisis Sonar para Node.js (mismo criterio que Java: no en MR).
+
 sonar_node:
   stage: sonar
   image: sonarsource/sonar-scanner-cli:latest
@@ -153,17 +149,16 @@ sonar_node:
       -Dsonar.host.url="$SONAR_HOST_URL"
       -Dsonar.login="$SONAR_TOKEN"
 
-# ---------- DEPLOY MANUAL ----------
-# Mantengo este job manual como “placeholder” por si quiero disparar algo a mano.
+
+# ---------- DEPLOY MANUAL (placeholder) ----------
 deploy:
   stage: deploy
   when: manual
   script:
-    - echo "Deploy pendiente — se implementará en la tarjeta F3-4 (EC2/ECS)"
+    - echo "Deploy pendiente — placeholder"
 
 # ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
 
-# --- Build & Push a ECR ---
 build_and_push:
   stage: build
   image: docker:24
@@ -189,14 +184,14 @@ build_and_push:
     - REGISTRY_NO_PROTO="${ECR_REGISTRY#https://}"
     - REGISTRY_HOST="${REGISTRY_NO_PROTO%/}"
 
-    # Creo repo si no existe (sin romper el job)
+    # Creo repo si no existe
     - |
       echo "Verifico repositorio ECR..."
       if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
         aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" || true
       fi
 
-    # Login limpio
+    # Login en ECR
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY_HOST"
 
     # Build + tag
@@ -207,7 +202,6 @@ build_and_push:
     - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
 
-# --- DEPLOY EC2 ---
 deploy_ec2:
   stage: deploy
   image: alpine:3.20
@@ -222,7 +216,7 @@ deploy_ec2:
     - pip install --no-cache-dir awscli
     - aws --version
 
-    # SSH key
+    # SSH key desde variable EC2_SSH_KEY
     - mkdir -p ~/.ssh
     - |
       if [ -f "$EC2_SSH_KEY" ]; then
@@ -257,7 +251,6 @@ deploy_ec2:
       export ECR_REGISTRY='${ECR_REGISTRY}'
       export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-      # Normalizo registry en la instancia
       REGISTRY_NO_PROTO=\"\${ECR_REGISTRY#https://}\"
       REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
       export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
