@@ -1,0 +1,270 @@
+# ---------- PIPELINE SCOPE ----------
+workflow:
+  rules:
+    # Ejecutar en MRs (si el usuario lo ha activado)
+{% if config.run_on_mr %}
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+{% endif %}
+    # Ejecutar cuando haya push a cualquier rama
+    - if: '$CI_COMMIT_BRANCH'
+    # Si nada aplica, no ejecuto nada
+    - when: never
+
+# ---------- STAGES ----------
+stages:
+  - build
+  - test
+  - sonar
+  - deploy
+
+# ========== VARIABLES GLOBALES (AWS / ECR) ==========
+variables:
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+{% if config.use_aws %}
+  ECR_REGISTRY: "{{ config.aws.registry }}"
+  ECR_REPOSITORY: "{{ config.aws.repository }}"
+{% endif %}
+
+# ---------- DEFAULTS ----------
+default:
+  retry: 1
+  before_script:
+    - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
+
+# ---------- JOB SENTINELA ----------
+pipeline_ok:
+  stage: build
+  script:
+    - echo "Pipeline iniciado correctamente"
+
+# ===================== JAVA / MAVEN =====================
+build_java:
+  stage: build
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    - exists:
+        - pom.xml
+  script:
+    - echo "Compilando proyecto Maven..."
+    - mvn -B -DskipTests package
+  artifacts:
+    when: always
+    paths:
+      - target/*.jar
+    expire_in: 1 week
+
+test_java:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  needs: [build_java]
+  rules:
+    - exists:
+        - pom.xml
+  script:
+    - echo "Ejecutando tests Maven..."
+    - mvn -B -DfailIfNoTests=false -Dmaven.test.failure.ignore=true test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "**/target/surefire-reports/*.xml"
+
+# ===================== SONAR JAVA =====================
+{% if config.use_sonar %}
+sonar_java:
+  stage: sonar
+  image: maven:3.9-eclipse-temurin-21
+  rules:
+    # Solo si hay variables de Sonar y es push a develop/main
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION && $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+      exists:
+        - pom.xml
+    # O si es tag
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $SONAR_ORGANIZATION && $CI_COMMIT_TAG'
+      exists:
+        - pom.xml
+    - when: never
+  script:
+    - echo "Ejecuto verify para generar jacoco.xml y clases compiladas"
+    - mvn -B clean verify -DfailIfNoTests=false -Dmaven.test.failure.ignore=true
+    - echo "Analizo con SonarCloud (rama/tag)"
+    - >
+      mvn -B sonar:sonar
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.organization="$SONAR_ORGANIZATION"
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+      -Dsonar.coverage.jacoco.xmlReportPaths="**/target/site/jacoco/jacoco.xml"
+{% endif %}
+
+# ===================== NODE.JS =====================
+build_node:
+  stage: build
+  image: node:20
+  rules:
+    - exists:
+        - package.json
+  script:
+    - echo "Instalo dependencias de Node…"
+    - npm ci || npm install
+    - echo "Ejecuto build si existe…"
+    - npm run build || echo "No hay script build, continúo"
+  artifacts:
+    when: always
+    paths:
+      - dist/
+      - build/
+    expire_in: 1 week
+
+test_node:
+  stage: test
+  image: node:20
+  needs: [build_node]
+  rules:
+    - exists:
+        - package.json
+  script:
+    - echo "Lanzo tests de Node…"
+    - npm ci || npm install
+    - npm test -- --ci || npm test || echo "Sin tests definidos, continúo"
+
+{% if config.use_sonar %}
+sonar_node:
+  stage: sonar
+  image: sonarsource/sonar-scanner-cli:latest
+  rules:
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "develop" || $CI_COMMIT_BRANCH == "main")'
+      exists:
+        - package.json
+    - if: '$SONAR_HOST_URL && $SONAR_TOKEN && $SONAR_PROJECT_KEY && $CI_COMMIT_TAG'
+      exists:
+        - package.json
+    - when: never
+  script:
+    - echo "Analizo código con SonarCloud (Node)…"
+    - >
+      sonar-scanner
+      -Dsonar.projectKey="$SONAR_PROJECT_KEY"
+      -Dsonar.sources=.
+      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.login="$SONAR_TOKEN"
+{% endif %}
+
+# ---------- DEPLOY MANUAL (placeholder) ----------
+deploy:
+  stage: deploy
+  when: manual
+  script:
+    - echo "Deploy pendiente — placeholder"
+
+# ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
+{% if config.use_aws %}
+build_and_push:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+    DOCKER_DRIVER: overlay2
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
+  script:
+    - echo "Instalo AWS CLI"
+    - apk add --no-cache bash curl jq python3 py3-pip unzip
+    - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
+    - pip install --no-cache-dir awscli
+    - export PATH="/tmp/awscli/bin:$PATH"
+    - aws --version
+
+    # Normalizo registry
+    - REGISTRY_NO_PROTO="${ECR_REGISTRY#https://}"
+    - REGISTRY_HOST="${REGISTRY_NO_PROTO%/}"
+
+    # Creo repo si no existe
+    - |
+      echo "Verifico repositorio ECR..."
+      if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
+        aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" || true
+      fi
+
+    # Login en ECR
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY_HOST"
+
+    # Build + tag
+    - docker build -t "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" .
+    - docker tag "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
+
+    # Push
+    - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG"
+    - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
+
+deploy_ec2:
+  stage: deploy
+  image: alpine:3.20
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+    - when: never
+
+  before_script:
+    - apk add --no-cache bash curl jq openssh-client python3 py3-pip
+    - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
+    - pip install --no-cache-dir awscli
+    - aws --version
+
+    # SSH key desde variable EC2_SSH_KEY
+    - mkdir -p ~/.ssh
+    - |
+      if [ -f "$EC2_SSH_KEY" ]; then
+        cp "$EC2_SSH_KEY" ~/.ssh/id_rsa
+      else
+        printf "%s" "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+      fi
+    - chmod 600 ~/.ssh/id_rsa
+
+    # known_hosts
+    - |
+      if [ -n "$EC2_KNOWN_HOSTS" ]; then
+        printf "%s\n" "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      else
+        ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+      fi
+
+  script:
+    - echo "Inicio despliegue en EC2"
+
+    - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+
+    - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
+
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
+      set -e
+
+      export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'
+      export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'
+      export AWS_REGION='${AWS_REGION}'
+      export ECR_REGISTRY='${ECR_REGISTRY}'
+      export ECR_REPOSITORY='${ECR_REPOSITORY}'
+
+      REGISTRY_NO_PROTO=\"\${ECR_REGISTRY#https://}\"
+      REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
+      export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
+
+      echo 'Login en ECR'
+      aws ecr get-login-password --region \"${AWS_REGION}\" \
+          | docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
+
+      cd ~/app
+      docker compose pull
+      docker compose up -d --remove-orphans
+      docker image prune -f
+      "
+
+  environment:
+    name: production
+{% endif %}

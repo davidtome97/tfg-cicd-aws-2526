@@ -1,0 +1,39 @@
+pipeline {
+agent any
+
+stages {
+stage('Checkout') {
+steps {
+checkout scm
+}
+}
+
+stage('Build') {
+steps {
+sh "./mvnw -B -DskipTests clean package"
+}
+}
+
+stage('Test') {
+steps {
+sh "./mvnw -B test"
+}
+}
+
+{% if use_sonar %}
+    stage('Sonar') {
+    steps {
+    echo 'Aquí iría el análisis Sonar para {{ project_name }}'
+    }
+    }
+{% endif %}
+
+{% if use_aws %}
+    stage('Deploy AWS') {
+    steps {
+    echo 'Aquí iría el despliegue a AWS para {{ project_name }}'
+    }
+    }
+{% endif %}
+}
+}
