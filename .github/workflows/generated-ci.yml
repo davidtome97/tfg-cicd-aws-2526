@@ -8,6 +8,8 @@ on:
 
       - "develop"
 
+      - "generator-demo"
+
 
     tags:
       - "*"
