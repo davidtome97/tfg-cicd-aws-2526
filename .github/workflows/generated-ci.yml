@@ -1,0 +1,46 @@
+name: CI-tfg-cicd-aws-2526
+
+on:
+  push:
+    branches: [ "generator-demo" ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build & Test
+        run: |
+          ./mvnw -B clean test
+
+
+  sonar:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: SonarCloud
+        run: |
+          ./mvnw -B verify sonar:sonar
+
+
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build_and_test, sonar]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to AWS (placeholder)
+        run: echo "Aquí iría el despliegue a AWS para tfg-cicd-aws-2526"
