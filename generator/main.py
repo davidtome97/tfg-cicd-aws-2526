@@ -26,4 +26,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main()# test pipelines dual GitHub + GitLab
