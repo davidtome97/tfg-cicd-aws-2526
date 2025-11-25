@@ -21,3 +21,4 @@ Diseñar e implementar un sistema de Integración Continua y Despliegue Continuo
 ## 🧠 Autor
 David Tomé — Grado en Ingeniería Informática
 
+# toque mínimo
