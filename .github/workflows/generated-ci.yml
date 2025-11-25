@@ -4,10 +4,6 @@ on:
   push:
     branches:
 
-      - "main"
-
-      - "develop"
-
       - "generator-demo"
 
 
@@ -77,8 +73,8 @@ jobs:
           -Dsonar.host.url=https://sonarcloud.io
 
 
-  # ======================================================
-  # DEPLOY AWS (opcional)
+    # ======================================================
+  # DEPLOY AWS (opcional) - Build + push a ECR
   # ======================================================
 
   deploy:
@@ -88,23 +84,29 @@ jobs:
 
       - sonar
 
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Login to AWS/ECR (placeholder)
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          echo "Aquí iría el login a AWS/ECR usando tus secrets."
+      - name: Configurar credenciales de AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Deploy to AWS (placeholder)
+      - name: Login en Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build y push de imagen Docker a ECR
         env:
-          AWS_ECR_REGISTRY: ${{ secrets.AWS_ECR_REGISTRY }}
-          AWS_ECR_REPOSITORY: ${{ secrets.AWS_ECR_REPOSITORY }}
-          AWS_EC2_HOST: ${{ secrets.AWS_EC2_HOST }}
-          AWS_EC2_USER: ${{ secrets.AWS_EC2_USER }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ github.repository }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          echo "Desplegando el proyecto tfg-cicd-aws-2526"
-          echo "Host EC2 = $AWS_EC2_HOST"
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Construyendo imagen: $IMAGE_URI"
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "Imagen publicada en ECR -> $IMAGE_URI"
