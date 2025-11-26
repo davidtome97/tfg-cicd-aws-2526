@@ -39,7 +39,7 @@ jobs:
 
       - name: Build & Test
         run: |
-          ./mvnw -B -f app/pom.xml test
+          ./mvnw -B -f pom.xml test
 
   # ======================================================
   # SONAR (opcional)
@@ -73,7 +73,7 @@ jobs:
           {% if config.sonar.host %}-Dsonar.host.url={{ config.sonar.host }}{% endif %}
 {% endif %}
 
-    # ======================================================
+  # ======================================================
   # DEPLOY AWS (opcional) - Build + push a ECR
   # ======================================================
 {% if config.use_aws %}
@@ -83,6 +83,16 @@ jobs:
       - build_and_test
 {% if config.use_sonar %}
       - sonar
+{% endif %}
+{% if config.deploy_mode == 'main' %}
+    # Opción 1) En cada push a main
+    if: github.ref == 'refs/heads/main'
+{% elif config.deploy_mode == 'tag' %}
+    # Opción 2) Solo cuando haya un tag (release)
+    if: startsWith(github.ref, 'refs/tags/')
+{% elif config.deploy_mode == 'manual' %}
+    # Opción 3) Solo manual (desde la UI de Actions)
+    if: github.event_name == 'workflow_dispatch'
 {% endif %}
 
     steps:
