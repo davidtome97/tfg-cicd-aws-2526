@@ -70,7 +70,7 @@ jobs:
 
         run: |
           ./mvnw -B verify sonar:sonar \
-          -Dsonar.projectKey=davidtome97_tfg-parent  \
+          -Dsonar.projectKey=davidtome97_tfg-cicd-aws-2526  \
           -Dsonar.organization=davidtome97  \
           -Dsonar.host.url=https://sonarcloud.io
 
