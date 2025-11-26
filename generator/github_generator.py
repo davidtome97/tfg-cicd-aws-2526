@@ -79,7 +79,7 @@ class GitHubWorkflowGenerator:
                   ) == "s"
 
         deploy_mode = "none"  # none | main | tag | manual
-        aws_secrets = {}
+        aws_secrets: dict[str, str] = {}
 
         if use_aws:
             print("\n¿Cuándo quieres que se dispare el deploy?")
@@ -195,6 +195,14 @@ class GitHubWorkflowGenerator:
     # -------------------------- PDF -------------------------- #
     @staticmethod
     def _create_pdf(config: dict, pdf_path: Path) -> None:
+        """
+        Crea un PDF explicativo con:
+        - Resumen de configuración
+        - Requisitos del proyecto (mvnw / pom.xml)
+        - Secrets necesarios en GitHub (Sonar / AWS)
+        - Dónde conseguir cada valor (SonarCloud, IAM, ECR, EC2…)
+        - Cómo crear los secrets en GitHub
+        """
         c = canvas.Canvas(str(pdf_path))
         y = 800
 
@@ -214,6 +222,20 @@ class GitHubWorkflowGenerator:
         write(f"Ramas CI: {ramas_txt}")
         write(f"PR activado: {'sí' if config['run_on_pr'] else 'no'}", 40, 20)
 
+        # Requisitos del proyecto
+        y -= 10
+        write("Requisitos del proyecto para este workflow:", 40, 20)
+        write("- Proyecto Java con Maven Wrapper (./mvnw).", 60)
+        write("- Fichero app/pom.xml (el workflow llama a -f app/pom.xml).", 60)
+        write(
+            "- Si tu código está en otra ruta, adapta las rutas -f app/pom.xml en el YAML.",
+            60,
+        )
+        write(
+            "- Si no tienes mvnw, puedes cambiar ./mvnw por mvn en los pasos de Maven.",
+            60,
+        )
+
         # Sonar
         write(f"Sonar: {'sí' if config['use_sonar'] else 'no'}", 40, 20)
         if config["use_sonar"]:
@@ -230,6 +252,15 @@ class GitHubWorkflowGenerator:
                 write(f"sonar.organization: {config['sonar']['organization']}")
             y -= 10
 
+            # Secrets Sonar
+            write("Secrets necesarios para SonarCloud:", 40, 18)
+            write("- SONAR_HOST_URL  (ej: https://sonarcloud.io)", 60)
+            write(
+                "- SONAR_TOKEN     (token personal de SonarCloud para análisis)",
+                60,
+            )
+            y -= 10
+
         # AWS
         write(f"AWS (deploy): {'sí' if config['use_aws'] else 'no'}", 40, 20)
         if config["use_aws"]:
@@ -237,8 +268,8 @@ class GitHubWorkflowGenerator:
             modo_txt = modos.get(config["deploy_mode"], config["deploy_mode"])
             write(f"Modo deploy: {modo_txt}", 40, 25)
 
-            write("Nombres de secrets AWS (GitHub Secrets):", 40, 20)
-            etiquetas = {
+            write("Secrets AWS utilizados en el workflow:", 40, 20)
+            etiquetas_legibles = {
                 "access_key": "Access Key ID",
                 "secret_key": "Secret Access Key",
                 "region": "Región AWS",
@@ -247,9 +278,24 @@ class GitHubWorkflowGenerator:
                 "ec2_host": "Host/IP EC2",
                 "ec2_user": "Usuario EC2",
             }
+            ejemplos_valor = {
+                "access_key": "AKIAIOSFODNN7EXAMPLE",
+                "secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY",
+                "region": "eu-west-1",
+                "ecr_registry": "123456789012.dkr.ecr.eu-west-1.amazonaws.com",
+                "ecr_repo": "tfg-cicd-aws-2526",
+                "ec2_host": "ec2-11-22-33-44.eu-west-1.compute.amazonaws.com",
+                "ec2_user": "ubuntu",
+            }
+
             for key, secret_name in config["aws_secrets"].items():
-                legible = etiquetas.get(key, key)
-                write(f"- {legible}: {secret_name}", 60, 15)
+                legible = etiquetas_legibles.get(key, key)
+                ejemplo = ejemplos_valor.get(key, "valor-ejemplo")
+                write(
+                    f"- {legible}: {secret_name}  (ejemplo de valor: {ejemplo})",
+                    60,
+                    15,
+                )
 
         # BD
         y -= 10
@@ -283,17 +329,38 @@ class GitHubWorkflowGenerator:
             write("2. Selecciona un usuario con permisos para ECR/EC2.", 60)
             write("3. Pestaña 'Security credentials' → Create access key.", 60)
             write("4. Copia 'Access key ID' y 'Secret access key'.", 60)
+            # no asumimos nombres, usamos los de aws_secrets si existen
+            access_name = config["aws_secrets"].get("access_key", "AWS_ACCESS_KEY_ID")
+            secret_name = config["aws_secrets"].get(
+                "secret_key", "AWS_SECRET_ACCESS_KEY"
+            )
             write(
-                "5. Crea los secrets AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY.", 60
+                f"5. Crea los secrets {access_name} y {secret_name} en GitHub.",
+                60,
             )
             y -= 10
 
             write("Otros valores AWS necesarios:", 40, 18)
-            write("- AWS_REGION: ej. eu-west-1", 60)
-            write("- AWS_ECR_REGISTRY: copiar desde AWS ECR (Copy URI).", 60)
-            write("- AWS_ECR_REPOSITORY: nombre del repo de ECR.", 60)
-            write("- AWS_EC2_HOST: IP pública / DNS de la instancia EC2.", 60)
-            write("- AWS_EC2_USER: ej. ubuntu / ec2-user.", 60)
+            region_name = config["aws_secrets"].get("region", "AWS_REGION")
+            reg_name = config["aws_secrets"].get("ecr_registry", "AWS_ECR_REGISTRY")
+            repo_name = config["aws_secrets"].get("ecr_repo", "AWS_ECR_REPOSITORY")
+            host_name = config["aws_secrets"].get("ec2_host", "AWS_EC2_HOST")
+            user_name = config["aws_secrets"].get("ec2_user", "AWS_EC2_USER")
+
+            write(f"- {region_name}: ej. eu-west-1", 60)
+            write(
+                f"- {reg_name}: copiar desde AWS ECR (Copy URI, parte del registry).",
+                60,
+            )
+            write(
+                f"- {repo_name}: nombre del repo de ECR (sin la URL completa).",
+                60,
+            )
+            write(
+                f"- {host_name}: IP pública / DNS de la instancia EC2.",
+                60,
+            )
+            write(f"- {user_name}: ej. ubuntu / ec2-user.", 60)
             y -= 10
 
         write("Cómo crear secrets en GitHub:", 40, 18)
@@ -319,3 +386,58 @@ class GitHubWorkflowGenerator:
         print("\n✅ Workflow de GitHub generado correctamente:")
         print(f" - YAML: {yaml_path}")
         print(f" - PDF:  {pdf_path}")
+
+        # Resumen adicional por consola de los secrets necesarios
+        print("\n" + "─" * 60)
+        print("⚙️  Configuración necesaria en GitHub (Secrets & variables)")
+        print("─" * 60)
+
+        if config["use_sonar"]:
+            print("\n1) Secrets para SonarCloud")
+            print("   - SONAR_HOST_URL")
+            print("       • Ejemplo de valor: https://sonarcloud.io")
+            print("       • Origen: URL base de SonarCloud.")
+            print("   - SONAR_TOKEN")
+            print(
+                "       • Ejemplo: sqa_1234567890abcdef1234567890abcdef1234 (formato aproximado)"
+            )
+            print(
+                "       • Origen: SonarCloud → My Account → Security → nuevo token."
+            )
+
+        if config["use_aws"]:
+            print("\n2) Secrets para AWS (ECR + EC2)")
+            aws = config["aws_secrets"]
+            print(
+                f"   - {aws.get('access_key', 'AWS_ACCESS_KEY_ID')}  (Access Key ID IAM)"
+            )
+            print(
+                f"   - {aws.get('secret_key', 'AWS_SECRET_ACCESS_KEY')}  (Secret Access Key IAM)"
+            )
+            print(f"   - {aws.get('region', 'AWS_REGION')}  (Región, ej: eu-west-1)")
+            print(
+                f"   - {aws.get('ecr_registry', 'AWS_ECR_REGISTRY')}  (Registry ECR, ej: 123456789012.dkr.ecr.eu-west-1.amazonaws.com)"
+            )
+            print(
+                f"   - {aws.get('ecr_repo', 'AWS_ECR_REPOSITORY')}  (Nombre del repo ECR, ej: tfg-cicd-aws-2526)"
+            )
+            print(
+                f"   - {aws.get('ec2_host', 'AWS_EC2_HOST')}  (DNS/IP pública de la EC2)"
+            )
+            print(
+                f"   - {aws.get('ec2_user', 'AWS_EC2_USER')}  (Usuario SSH, ej: ubuntu / ec2-user)"
+            )
+
+            print("\n   De dónde sacar cada valor:")
+            print("   - Credenciales IAM: AWS Console → IAM → Users → Security credentials.")
+            print("   - Registry/Repo ECR: AWS Console → ECR → Repositories → Copy URI.")
+            print(
+                "   - Host EC2: AWS Console → EC2 → Instances → Public IPv4 DNS / address."
+            )
+            print("   - Usuario EC2: depende de la AMI (Ubuntu: 'ubuntu').")
+
+        if config["use_sonar"] or config["use_aws"]:
+            print("\n📌 Dónde crear los secrets:")
+            print("   1. GitHub → tu repositorio.")
+            print("   2. Settings → Secrets and variables → Actions.")
+            print("   3. 'New repository secret' para cada uno de los anteriores.")

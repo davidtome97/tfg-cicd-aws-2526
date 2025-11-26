@@ -7,7 +7,6 @@ on:
       - "main"
 
       - "develop"
-      - "generator-demo"
 
 
     tags:
@@ -20,7 +19,6 @@ on:
       - "main"
 
       - "develop"
-      - "generator-demo"
 
 
 
@@ -43,7 +41,7 @@ jobs:
 
       - name: Build & Test
         run: |
-          ./mvnw -B -f app/pom.xml test
+          ./mvnw -B -f pom.xml test
 
   # ======================================================
   # SONAR (opcional)
@@ -72,12 +70,12 @@ jobs:
 
         run: |
           ./mvnw -B verify sonar:sonar \
-          -Dsonar.projectKey=davidtome97_tfg-cicd-aws-2526  \
+          -Dsonar.projectKey=davidtome97_tfg-parent  \
           -Dsonar.organization=davidtome97  \
           -Dsonar.host.url=https://sonarcloud.io
 
 
-    # ======================================================
+  # ======================================================
   # DEPLOY AWS (opcional) - Build + push a ECR
   # ======================================================
 
@@ -87,6 +85,10 @@ jobs:
       - build_and_test
 
       - sonar
+
+
+    # Opción 2) Solo cuando haya un tag (release)
+    if: startsWith(github.ref, 'refs/tags/')
 
 
     steps:

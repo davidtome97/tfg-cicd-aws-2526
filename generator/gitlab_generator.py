@@ -131,6 +131,7 @@ class GitLabWorkflowGenerator:
         """
         PDF explicativo:
         - Resumen configuración
+        - Requisitos del proyecto (Maven / pom.xml / package.json)
         - Qué variables CI/CD intervienen
         - Dónde conseguir cada valor (IAM, ECR, EC2, SonarCloud)
         - Dónde crear las variables en GitLab
@@ -146,7 +147,9 @@ class GitLabWorkflowGenerator:
             c.drawString(indent, y, text)
             y -= step
 
-        # Encabezado
+        # ---------------------------------------------------------
+        # ENCABEZADO
+        # ---------------------------------------------------------
         write("Resumen pipeline GitLab CI/CD generado", 40, 30)
         write(f"Proyecto: {config['project_name']}")
         write("Plataforma CI: GitLab CI/CD")
@@ -158,7 +161,27 @@ class GitLabWorkflowGenerator:
             20,
         )
 
-        # Sonar
+        # ---------------------------------------------------------
+        # REQUISITOS DEL PROYECTO
+        # ---------------------------------------------------------
+        y -= 10
+        write("Requisitos del proyecto para este pipeline:", 40, 20)
+        write("- Para los jobs Java (build_java/test_java/sonar_java):", 60)
+        write("  · Debe existir un pom.xml en el repositorio.", 80)
+        write("  · Si no existe, estos jobs se saltan automáticamente.", 80)
+
+        write("- Para los jobs Node (build_node/test_node/sonar_node):", 60)
+        write("  · Debe existir package.json.", 80)
+        write("  · Si no existe, los jobs Node también se saltan.", 80)
+
+        write("- El pipeline soporta proyectos híbridos (Java + Node).", 60)
+        write("- Si no existiera ninguno de los dos, solo se ejecuta el sentinela.", 60)
+
+        y -= 10
+
+        # ---------------------------------------------------------
+        # SONAR
+        # ---------------------------------------------------------
         write(f"Sonar: {'sí' if config['use_sonar'] else 'no'}", 40, 20)
         if config["use_sonar"]:
             if config["sonar"].get("host"):
@@ -169,7 +192,9 @@ class GitLabWorkflowGenerator:
                 write(f"sonar.organization: {config['sonar']['organization']}")
             y -= 10
 
+        # ---------------------------------------------------------
         # AWS / ECR / EC2
+        # ---------------------------------------------------------
         write(f"AWS/ECR/EC2: {'sí' if config['use_aws'] else 'no'}", 40, 20)
         if config["use_aws"]:
             aws = config["aws"]
@@ -187,7 +212,9 @@ class GitLabWorkflowGenerator:
             write(f"- {aws['known_hosts_var']} (huella SSH opcional)", 60)
             y -= 10
 
-        # Dónde crear las variables en GitLab
+        # ---------------------------------------------------------
+        # DÓNDE CREAR LAS VARIABLES EN GITLAB
+        # ---------------------------------------------------------
         write("¿Dónde crear las variables en GitLab?", 40, 20)
         write("1. Ve a tu proyecto en GitLab.", 60)
         write("2. Menú lateral → Settings → CI/CD.", 60)
@@ -196,9 +223,11 @@ class GitLabWorkflowGenerator:
         write("5. En 'Key' pon el NOMBRE: p.ej. AWS_ACCESS_KEY_ID.", 60)
         write("6. En 'Value' pega el valor real (access key, secret, etc.).", 60)
         write("7. Marca 'Protected' para usarla solo en ramas protegidas.", 60)
-        write("8. Marca 'Masked' para que no salga en los logs (si es secreto).", 60)
+        write("8. Marca 'Masked' para ocultarla en logs.", 60)
 
-        # De dónde sacar cada valor AWS
+        # ---------------------------------------------------------
+        # DE DÓNDE SACAR CADA VALOR DE AWS
+        # ---------------------------------------------------------
         if config["use_aws"]:
             y -= 20
             write("¿De dónde saco cada valor de AWS?", 40, 18)
@@ -220,25 +249,28 @@ class GitLabWorkflowGenerator:
 
             write("EC2_HOST:", 60)
             write(" - AWS Console → EC2 → Instances.", 80)
-            write(" - Columna 'Public IPv4 address' o 'Public DNS'.", 80)
+            write(" - Public IPv4 address o Public DNS.", 80)
 
             write("EC2_USER:", 60)
-            write(" - Depende de la AMI: normalmente 'ubuntu' o 'ec2-user'.", 80)
+            write(" - Para Ubuntu → usuario = ubuntu", 80)
+            write(" - Para Amazon Linux → usuario = ec2-user", 80)
 
             write("EC2_SSH_KEY:", 60)
             write(" - Contenido de tu .pem de la EC2 (sin passphrase).", 80)
 
             write("EC2_KNOWN_HOSTS (opcional):", 60)
-            write(" - Salida de 'ssh-keyscan -H <EC2_HOST>' en tu terminal.", 80)
+            write(" - Salida de: ssh-keyscan -H <EC2_HOST>", 80)
 
-        # SonarCloud en GitLab
+        # ---------------------------------------------------------
+        # SONAR CLOUD
+        # ---------------------------------------------------------
         if config["use_sonar"]:
             y -= 20
             write("Token SonarCloud para GitLab (SONAR_TOKEN):", 40, 18)
             write("1. Entra en SonarCloud con tu usuario.", 60)
-            write("2. Menú usuario → 'My Account' → 'Security'.", 60)
+            write("2. Menú usuario → My Account → Security.", 60)
             write("3. Crea un token nuevo y cópialo.", 60)
-            write("4. En GitLab crea la variable SONAR_TOKEN con ese valor.", 60)
+            write("4. Guarda el token en GitLab → variable SONAR_TOKEN.", 60)
 
         c.showPage()
         c.save()
