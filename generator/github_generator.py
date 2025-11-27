@@ -13,17 +13,21 @@ class GitHubWorkflowGenerator:
     """
 
     def __init__(self) -> None:
+        # Localizo la raíz del proyecto para poder resolver rutas relativas
         self.root = Path(__file__).resolve().parents[1]
+        # Carpeta donde tengo las plantillas Jinja2
         self.templates_dir = self.root / "generator" / "templates"
 
     # -------------------------- INPUTS -------------------------- #
     def ask_inputs(self) -> dict:
         print("=== Generador de Workflows CI/CD (GitHub Actions) ===\n")
 
+        # Nombre que quiero que aparezca en el workflow de GitHub
         project_name = input(
             "Nombre del proyecto (para el nombre del workflow) [mi-proyecto]: "
         ).strip() or "mi-proyecto"
 
+        # Ramas donde quiero que se dispare la CI
         branches_raw = input(
             "Ramas donde quieres que se ejecute CI "
             "(separadas por coma, ej: main,develop) [main]: "
@@ -34,6 +38,7 @@ class GitHubWorkflowGenerator:
         else:
             branches = [b.strip() for b in branches_raw.split(",") if b.strip()]
 
+        # Decido si también quiero que la CI se ejecute en pull_request
         run_on_pr = (
                             input("¿Quieres que se ejecute también en pull_request? (s/n) [s]: ")
                             .strip()
@@ -41,7 +46,16 @@ class GitHubWorkflowGenerator:
                             or "s"
                     ) == "s"
 
+        # Pregunto si el proyecto también tiene parte en Node (por ejemplo un frontend)
+        use_node = (
+                           input("¿Tu proyecto también tiene parte en Node (frontend, etc.)? (s/n) [n]: ")
+                           .strip()
+                           .lower()
+                           or "n"
+                   ) == "s"
+
         # --- Sonar ---
+        # Aquí decido si quiero integrar análisis de calidad con SonarCloud
         use_sonar = (
                             input("¿Quieres incluir análisis de Sonar? (s/n) [s]: ")
                             .strip()
@@ -55,6 +69,7 @@ class GitHubWorkflowGenerator:
         sonar_org = ""
 
         if use_sonar:
+            # Si fallo el quality gate, decido si quiero que se rompa la pipeline o no
             fail_on_sonar = (
                                     input(
                                         "Si Sonar falla (quality gate), ¿debe ROMPER la pipeline? (s/n) [n]: "
@@ -71,6 +86,7 @@ class GitHubWorkflowGenerator:
             sonar_org = input("sonar.organization [vacío]: ").strip()
 
         # --- AWS / Deploy ---
+        # Aquí decido si quiero tener despliegue completo a AWS (ECR + EC2)
         use_aws = (
                           input("¿Quieres añadir deploy completo a AWS (ECR + EC2)? (s/n) [n]: ")
                           .strip()
@@ -96,10 +112,11 @@ class GitHubWorkflowGenerator:
                 deploy_mode = "manual"
 
             print(
-                "\nPara AWS vamos a usar NOMBRES de secrets de GitHub.\n"
-                "Tú luego tendrás que crear esos secrets con sus valores reales en GitHub."
+                "\nPara AWS voy a usar NOMBRES de secrets de GitHub.\n"
+                "Luego tendré que crear esos secrets con sus valores reales en GitHub."
             )
 
+            # Puedo usar los nombres de secrets por defecto o escribir los míos
             usar_defectos = (
                                     input(
                                         "¿Usar nombres de secrets AWS por defecto "
@@ -111,6 +128,7 @@ class GitHubWorkflowGenerator:
                             ) != "n"
 
             if usar_defectos:
+                # En este caso uso los nombres estándar que ya estoy utilizando en el workflow
                 aws_secrets = {
                     "access_key": "AWS_ACCESS_KEY_ID",
                     "secret_key": "AWS_SECRET_ACCESS_KEY",
@@ -121,6 +139,7 @@ class GitHubWorkflowGenerator:
                     "ec2_user": "EC2_USUARIO",
                 }
             else:
+                # Aquí puedo personalizar los nombres de todos los secrets
                 print(
                     "\nIntroduce los NOMBRES de los secrets que quieres usar (no valores):"
                 )
@@ -153,14 +172,17 @@ class GitHubWorkflowGenerator:
                                 or "EC2_USUARIO",
                 }
 
+        # Esta pregunta solo la uso a nivel informativo en el PDF
         use_db = (
                          input("¿Tu proyecto usa base de datos? (s/n) [s]: ").strip().lower() or "s"
                  ) == "s"
 
+        # Devuelvo toda la configuración para que la plantilla Jinja pueda generar el YAML
         return {
             "project_name": project_name,
             "branches": branches,
             "run_on_pr": run_on_pr,
+            "use_node": use_node,
             "use_sonar": use_sonar,
             "fail_on_sonar": fail_on_sonar,
             "sonar": {
@@ -177,17 +199,20 @@ class GitHubWorkflowGenerator:
 
     # -------------------------- RENDER -------------------------- #
     def render_yaml(self, config: dict) -> str:
+        # Cargo el entorno de plantillas Jinja2 y renderizo el YAML
         env = Environment(loader=FileSystemLoader(str(self.templates_dir)))
         template = env.get_template("github_ci.yml.j2")
         return template.render(config=config)
 
     def output_paths(self) -> tuple[Path, Path]:
+        # Aquí defino dónde quiero guardar el YAML y el PDF que genero
         yaml_path = self.root / ".github" / "workflows" / "generated-ci.yml"
         pdf_path = self.root / "generator" / "workflow-github.pdf"
         return yaml_path, pdf_path
 
     @staticmethod
     def save_yaml(content: str, path: Path) -> None:
+        # Me aseguro de que la carpeta existe y escribo el YAML en disco
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -196,7 +221,7 @@ class GitHubWorkflowGenerator:
     @staticmethod
     def _create_pdf(config: dict, pdf_path: Path) -> None:
         """
-        Crea un PDF explicativo con:
+        Creo un PDF explicativo con:
         - Resumen de configuración
         - Requisitos del proyecto (mvnw / pom.xml)
         - Secrets necesarios en GitHub (Sonar / AWS)
@@ -207,6 +232,7 @@ class GitHubWorkflowGenerator:
         y = 800
 
         def write(text: str, indent: int = 40, step: int = 15):
+            # Pequeña función para escribir líneas con salto de página automático
             nonlocal y
             if y < 60:
                 c.showPage()
@@ -221,6 +247,11 @@ class GitHubWorkflowGenerator:
         ramas_txt = ", ".join(config["branches"]) if config["branches"] else "-"
         write(f"Ramas CI: {ramas_txt}")
         write(f"PR activado: {'sí' if config['run_on_pr'] else 'no'}", 40, 20)
+        write(
+            f"Proyecto con Node: {'sí' if config.get('use_node') else 'no'}",
+            40,
+            20,
+        )
 
         # Requisitos del proyecto
         y -= 10
@@ -228,13 +259,18 @@ class GitHubWorkflowGenerator:
         write("- Proyecto Java con Maven Wrapper (./mvnw).", 60)
         write("- Fichero pom.xml (el workflow llama a -f pom.xml).", 60)
         write(
-            "- Si tu código está en otra ruta, adapta las rutas -f pom.xml en el YAML.",
+            "- Si el código está en otra ruta, tengo que adaptar las rutas -f pom.xml en el YAML.",
             60,
         )
         write(
-            "- Si no tienes mvnw, puedes cambiar ./mvnw por mvn en los pasos de Maven.",
+            "- Si no tengo mvnw, puedo cambiar ./mvnw por mvn en los pasos de Maven.",
             60,
         )
+        if config.get("use_node"):
+            write(
+                "- Si uso Node, necesito package.json con scripts de test/lint si quiero aprovecharlos.",
+                60,
+            )
 
         # Sonar
         write(f"Sonar: {'sí' if config['use_sonar'] else 'no'}", 40, 20)
@@ -305,7 +341,7 @@ class GitHubWorkflowGenerator:
             20,
         )
         write(
-            "Recuerda crear los secrets en GitHub → Settings → Secrets and variables → Actions.",
+            "Recuerdo que tengo que crear los secrets en GitHub → Settings → Secrets and variables → Actions.",
             40,
             20,
         )
@@ -316,25 +352,25 @@ class GitHubWorkflowGenerator:
 
         if config["use_sonar"]:
             write("Token de SonarCloud (SONAR_TOKEN):", 40, 18)
-            write("1. Entra en SonarCloud con tu usuario.", 60)
+            write("1. Entro en SonarCloud con mi usuario.", 60)
             write("2. Arriba a la derecha → My Account → Security.", 60)
-            write("3. Crea un token nuevo (scope: analysis).", 60)
-            write("4. Copia el token y guárdalo (solo se muestra una vez).", 60)
-            write("5. Crea el secret SONAR_TOKEN en GitHub con ese valor.", 60)
+            write("3. Creo un token nuevo (scope: analysis).", 60)
+            write("4. Copio el token y lo guardo (solo se muestra una vez).", 60)
+            write("5. Creo el secret SONAR_TOKEN en GitHub con ese valor.", 60)
             y -= 10
 
         if config["use_aws"]:
             write("Credenciales de AWS (Access key / Secret key):", 40, 18)
-            write("1. Entra en AWS Console → IAM → Users.", 60)
-            write("2. Selecciona un usuario con permisos para ECR/EC2.", 60)
+            write("1. Entro en AWS Console → IAM → Users.", 60)
+            write("2. Selecciono un usuario con permisos para ECR/EC2.", 60)
             write("3. Pestaña 'Security credentials' → Create access key.", 60)
-            write("4. Copia 'Access key ID' y 'Secret access key'.", 60)
+            write("4. Copio 'Access key ID' y 'Secret access key'.", 60)
             access_name = config["aws_secrets"].get("access_key", "AWS_ACCESS_KEY_ID")
             secret_name = config["aws_secrets"].get(
                 "secret_key", "AWS_SECRET_ACCESS_KEY"
             )
             write(
-                f"5. Crea los secrets {access_name} y {secret_name} en GitHub.",
+                f"5. Creo los secrets {access_name} y {secret_name} en GitHub.",
                 60,
             )
             y -= 10
@@ -363,18 +399,19 @@ class GitHubWorkflowGenerator:
             y -= 10
 
         write("Cómo crear secrets en GitHub:", 40, 18)
-        write("1. Abre tu repositorio en GitHub.", 60)
-        write("2. Ve a Settings → Secrets and variables → Actions.", 60)
-        write("3. Pulsa 'New repository secret'.", 60)
-        write("4. Escribe el NOMBRE EXACTO del secret que aparece en este PDF.", 60)
-        write("5. Pega el valor correspondiente.", 60)
-        write("6. Repite el proceso para cada secret necesario.", 60)
+        write("1. Abro mi repositorio en GitHub.", 60)
+        write("2. Voy a Settings → Secrets and variables → Actions.", 60)
+        write("3. Pulso 'New repository secret'.", 60)
+        write("4. Escribo el NOMBRE EXACTO del secret que aparece en este PDF.", 60)
+        write("5. Pego el valor correspondiente.", 60)
+        write("6. Repito el proceso para cada secret necesario.", 60)
 
         c.showPage()
         c.save()
 
     # -------------------------- RUN -------------------------- #
     def run(self) -> None:
+        # Pido todos los datos, genero el YAML y el PDF y dejo un pequeño resumen por consola
         config = self.ask_inputs()
         yaml_content = self.render_yaml(config)
         yaml_path, pdf_path = self.output_paths()
@@ -382,27 +419,18 @@ class GitHubWorkflowGenerator:
         self.save_yaml(yaml_content, yaml_path)
         self._create_pdf(config, pdf_path)
 
-        print("\n✅ Workflow de GitHub generado correctamente:")
+        print("\nWorkflow de GitHub generado correctamente.")
         print(f" - YAML: {yaml_path}")
         print(f" - PDF:  {pdf_path}")
 
-        # Resumen adicional por consola de los secrets necesarios
-        print("\n" + "─" * 60)
-        print("⚙️  Configuración necesaria en GitHub (Secrets & variables)")
-        print("─" * 60)
+        print("\nResumen de configuración para GitHub (secrets y variables):")
 
         if config["use_sonar"]:
             print("\n1) Secrets para SonarCloud")
             print("   - SONAR_HOST_URL")
-            print("       • Ejemplo de valor: https://sonarcloud.io")
-            print("       • Origen: URL base de SonarCloud.")
+            print("     Ejemplo de valor: https://sonarcloud.io")
             print("   - SONAR_TOKEN")
-            print(
-                "       • Ejemplo: sqa_1234567890abcdef1234567890abcdef1234 (formato aproximado)"
-            )
-            print(
-                "       • Origen: SonarCloud → My Account → Security → nuevo token."
-            )
+            print("     Origen: SonarCloud → My Account → Security → nuevo token.")
 
         if config["use_aws"]:
             print("\n2) Secrets para AWS (ECR + EC2)")
@@ -427,16 +455,16 @@ class GitHubWorkflowGenerator:
                 f"   - {aws.get('ec2_user', 'EC2_USUARIO')}  (Usuario SSH, ej: ubuntu / ec2-user)"
             )
 
-            print("\n   De dónde sacar cada valor:")
+            print("\n   De dónde saco cada valor:")
             print("   - Credenciales IAM: AWS Console → IAM → Users → Security credentials.")
             print("   - Registry/Repo ECR: AWS Console → ECR → Repositories → Copy URI.")
             print(
                 "   - Host EC2: AWS Console → EC2 → Instances → Public IPv4 DNS / address."
             )
-            print("   - Usuario EC2: depende de la AMI (Ubuntu: 'ubuntu').")
+            print("   - Usuario EC2: depende de la AMI (por ejemplo, 'ubuntu').")
 
         if config["use_sonar"] or config["use_aws"]:
-            print("\n📌 Dónde crear los secrets:")
-            print("   1. GitHub → tu repositorio.")
-            print("   2. Settings → Secrets and variables → Actions.")
-            print("   3. 'New repository secret' para cada uno de los anteriores.")
+            print("\nDónde crear los secrets:")
+            print("   1. Entro en GitHub y abro mi repositorio.")
+            print("   2. Voy a Settings → Secrets and variables → Actions.")
+            print("   3. Creo un 'New repository secret' para cada nombre que he usado.")
