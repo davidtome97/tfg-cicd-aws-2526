@@ -87,15 +87,24 @@ jobs:
 
       - name: Build y push de imagen Docker a ECR
         env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ github.repository }}
+          ECR_REGISTRY: ${{ secrets.AWS_ECR_URL }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "Construyendo imagen: $IMAGE_URI"
+
+          # build con el SHA
           docker build -t "$IMAGE_URI" .
+
+          # también tagueo :latest (como en GitLab)
+          docker tag "$IMAGE_URI" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          # push de ambas tags
           docker push "$IMAGE_URI"
-          echo "Imagen publicada en ECR -> $IMAGE_URI"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+          echo "Imágenes publicadas en ECR -> $IMAGE_URI y $ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
   # ======================================================
   # DEPLOY EN EC2 (como en GitLab)
