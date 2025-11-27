@@ -6,7 +6,7 @@ on:
 
       - "main"
 
-      - "develop"
+      - "develop)"
 
     tags:
       - "*"
@@ -17,7 +17,7 @@ on:
 
       - "main"
 
-      - "develop"
+      - "develop)"
 
 
 
@@ -62,9 +62,7 @@ jobs:
 
       - name: SonarCloud Analysis
         env:
-
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
           SONAR_HOST_URL: "https://sonarcloud.io"
         run: |
           ./mvnw -B verify sonar:sonar \
@@ -96,11 +94,9 @@ jobs:
       - name: Configurar credenciales de AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
 
       - name: Login en Amazon ECR
         id: ecr
@@ -108,11 +104,9 @@ jobs:
 
       - name: Build y push de imagen Docker a ECR
         env:
-
           ECR_REGISTRY: ${{ secrets.AWS_ECR_URL }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
           IMAGE_TAG: ${{ github.sha }}
-
         run: |
           IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "Construyendo imagen: $IMAGE_URI"
@@ -143,7 +137,6 @@ jobs:
 
 
     env:
-
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -153,7 +146,6 @@ jobs:
       EC2_USER: ${{ secrets.EC2_USUARIO }}
       EC2_LLAVE_SSH: ${{ secrets.EC2_LLAVE_SSH }}
       EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
-
 
     steps:
       - uses: actions/checkout@v4

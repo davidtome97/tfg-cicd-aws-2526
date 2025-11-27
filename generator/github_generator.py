@@ -72,7 +72,7 @@ class GitHubWorkflowGenerator:
 
         # --- AWS / Deploy ---
         use_aws = (
-                          input("¿Quieres añadir un job de deploy a AWS (build+push ECR)? (s/n) [n]: ")
+                          input("¿Quieres añadir deploy completo a AWS (ECR + EC2)? (s/n) [n]: ")
                           .strip()
                           .lower()
                           or "n"
@@ -115,10 +115,10 @@ class GitHubWorkflowGenerator:
                     "access_key": "AWS_ACCESS_KEY_ID",
                     "secret_key": "AWS_SECRET_ACCESS_KEY",
                     "region": "AWS_REGION",
-                    "ecr_registry": "AWS_ECR_REGISTRY",
-                    "ecr_repo": "AWS_ECR_REPOSITORY",
-                    "ec2_host": "AWS_EC2_HOST",
-                    "ec2_user": "AWS_EC2_USER",
+                    "ecr_registry": "AWS_ECR_URL",
+                    "ecr_repo": "ECR_REPOSITORY",
+                    "ec2_host": "EC2_HOST",
+                    "ec2_user": "EC2_USUARIO",
                 }
             else:
                 print(
@@ -138,19 +138,19 @@ class GitHubWorkflowGenerator:
                     "ecr_registry": input(
                         "Nombre del secret para URL del registry ECR: "
                     ).strip()
-                                    or "AWS_ECR_REGISTRY",
+                                    or "AWS_ECR_URL",
                     "ecr_repo": input(
                         "Nombre del secret para nombre del repositorio ECR: "
                     ).strip()
-                                or "AWS_ECR_REPOSITORY",
+                                or "ECR_REPOSITORY",
                     "ec2_host": input(
                         "Nombre del secret para host/IP de EC2: "
                     ).strip()
-                                or "AWS_EC2_HOST",
+                                or "EC2_HOST",
                     "ec2_user": input(
                         "Nombre del secret para usuario de EC2: "
                     ).strip()
-                                or "AWS_EC2_USER",
+                                or "EC2_USUARIO",
                 }
 
         use_db = (
@@ -226,9 +226,9 @@ class GitHubWorkflowGenerator:
         y -= 10
         write("Requisitos del proyecto para este workflow:", 40, 20)
         write("- Proyecto Java con Maven Wrapper (./mvnw).", 60)
-        write("- Fichero app/pom.xml (el workflow llama a -f app/pom.xml).", 60)
+        write("- Fichero pom.xml (el workflow llama a -f pom.xml).", 60)
         write(
-            "- Si tu código está en otra ruta, adapta las rutas -f app/pom.xml en el YAML.",
+            "- Si tu código está en otra ruta, adapta las rutas -f pom.xml en el YAML.",
             60,
         )
         write(
@@ -329,7 +329,6 @@ class GitHubWorkflowGenerator:
             write("2. Selecciona un usuario con permisos para ECR/EC2.", 60)
             write("3. Pestaña 'Security credentials' → Create access key.", 60)
             write("4. Copia 'Access key ID' y 'Secret access key'.", 60)
-            # no asumimos nombres, usamos los de aws_secrets si existen
             access_name = config["aws_secrets"].get("access_key", "AWS_ACCESS_KEY_ID")
             secret_name = config["aws_secrets"].get(
                 "secret_key", "AWS_SECRET_ACCESS_KEY"
@@ -342,10 +341,10 @@ class GitHubWorkflowGenerator:
 
             write("Otros valores AWS necesarios:", 40, 18)
             region_name = config["aws_secrets"].get("region", "AWS_REGION")
-            reg_name = config["aws_secrets"].get("ecr_registry", "AWS_ECR_REGISTRY")
-            repo_name = config["aws_secrets"].get("ecr_repo", "AWS_ECR_REPOSITORY")
-            host_name = config["aws_secrets"].get("ec2_host", "AWS_EC2_HOST")
-            user_name = config["aws_secrets"].get("ec2_user", "AWS_EC2_USER")
+            reg_name = config["aws_secrets"].get("ecr_registry", "AWS_ECR_URL")
+            repo_name = config["aws_secrets"].get("ecr_repo", "ECR_REPOSITORY")
+            host_name = config["aws_secrets"].get("ec2_host", "EC2_HOST")
+            user_name = config["aws_secrets"].get("ec2_user", "EC2_USUARIO")
 
             write(f"- {region_name}: ej. eu-west-1", 60)
             write(
@@ -416,16 +415,16 @@ class GitHubWorkflowGenerator:
             )
             print(f"   - {aws.get('region', 'AWS_REGION')}  (Región, ej: eu-west-1)")
             print(
-                f"   - {aws.get('ecr_registry', 'AWS_ECR_REGISTRY')}  (Registry ECR, ej: 123456789012.dkr.ecr.eu-west-1.amazonaws.com)"
+                f"   - {aws.get('ecr_registry', 'AWS_ECR_URL')}  (Registry ECR, ej: 123456789012.dkr.ecr.eu-west-1.amazonaws.com)"
             )
             print(
-                f"   - {aws.get('ecr_repo', 'AWS_ECR_REPOSITORY')}  (Nombre del repo ECR, ej: tfg-cicd-aws-2526)"
+                f"   - {aws.get('ecr_repo', 'ECR_REPOSITORY')}  (Nombre del repo ECR, ej: tfg-cicd-aws-2526)"
             )
             print(
-                f"   - {aws.get('ec2_host', 'AWS_EC2_HOST')}  (DNS/IP pública de la EC2)"
+                f"   - {aws.get('ec2_host', 'EC2_HOST')}  (DNS/IP pública de la EC2)"
             )
             print(
-                f"   - {aws.get('ec2_user', 'AWS_EC2_USER')}  (Usuario SSH, ej: ubuntu / ec2-user)"
+                f"   - {aws.get('ec2_user', 'EC2_USUARIO')}  (Usuario SSH, ej: ubuntu / ec2-user)"
             )
 
             print("\n   De dónde sacar cada valor:")
