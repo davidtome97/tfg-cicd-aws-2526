@@ -34,45 +34,12 @@ on:
 
 jobs:
 
-  # ======================================================
-  # JOB: Node.js (solo si uso Node)
-  # ======================================================
-  node_build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        # Aquí instalo Node porque mi proyecto también lo necesita.
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Instalar dependencias (npm install)
-        run: npm install
-
-      - name: Ejecutar tests Node
-        # Si no tengo tests configurados, no quiero que falle toda la pipeline.
-        run: npm test || echo "No tengo tests de Node configurados, continúo."
-
-      - name: Linter (npm run lint)
-        # Esto solo se ejecuta si tengo definido "lint" en package.json.
-        run: |
-          if npm run | grep -q lint; then
-            npm run lint
-          else
-            echo "No tengo script de lint, lo salto."
-          fi
-
 
   # ======================================================
   # JOB: Build & Test Java (Maven)
   # ======================================================
   build_and_test:
     runs-on: ubuntu-latest
-
-    # Si tengo Node, primero quiero que se construya el frontend.
-    needs: node_build
 
     steps:
       - uses: actions/checkout@v4
@@ -95,8 +62,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_and_test
-
-      - node_build
 
 
     # Si he elegido que Sonar no rompa la pipeline, lo marco como "continue-on-error".
@@ -131,8 +96,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_and_test
-
-      - node_build
 
 
       - sonar
