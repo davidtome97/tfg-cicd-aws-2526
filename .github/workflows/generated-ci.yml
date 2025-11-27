@@ -186,8 +186,12 @@ jobs:
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
+            # Aquí reconstruyo el host del registry a partir de la URL de ECR.
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
             REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
+
+            # Y aquí construyo IMAGE_URI, que es lo que usa mi docker-compose.yml.
+            export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
 
             echo 'Haciendo login en ECR desde la EC2'
             aws ecr get-login-password --region \"${AWS_REGION}\" \
