@@ -17,8 +17,6 @@ on:
 
       - "main"
 
-      - "develop"
-
     tags:
       - "*"
 
@@ -27,8 +25,6 @@ on:
     branches:
 
       - "main"
-
-      - "develop"
 
 
 
@@ -64,9 +60,6 @@ jobs:
       - build_and_test
 
 
-    # Si he elegido que Sonar no rompa la pipeline, lo marco como "continue-on-error".
-    continue-on-error: true
-
     steps:
       - uses: actions/checkout@v4
 
@@ -80,12 +73,14 @@ jobs:
         # Aquí ejecuto el análisis de calidad con SonarCloud.
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: "https://sonarcloud.io"
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
         run: |
           ./mvnw -B verify sonar:sonar \
-          -Dsonar.projectKey=davidtome97_tfg-cicd-aws-2526 \
-          -Dsonar.organization=davidtome97 \
-          -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+            -Dsonar.organization=${SONAR_ORGANIZATION} \
+            -Dsonar.host.url=${SONAR_HOST_URL}
 
 
 
