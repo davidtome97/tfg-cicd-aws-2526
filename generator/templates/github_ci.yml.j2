@@ -201,6 +201,14 @@ jobs:
       EC2_LLAVE_SSH: {% raw %}${{ secrets.EC2_LLAVE_SSH }}{% endraw %}
       EC2_KNOWN_HOSTS: {% raw %}${{ secrets.EC2_KNOWN_HOSTS }}{% endraw %}
 
+      # ---- Variables de Base de Datos (genéricas) ----
+      DB_ENGINE: {% raw %}${{ secrets.DB_ENGINE }}{% endraw %}
+      DB_HOST: {% raw %}${{ secrets.DB_HOST }}{% endraw %}
+      DB_PORT: {% raw %}${{ secrets.DB_PORT }}{% endraw %}
+      DB_NAME: {% raw %}${{ secrets.DB_NAME }}{% endraw %}
+      DB_USER: {% raw %}${{ secrets.DB_USER }}{% endraw %}
+      DB_PASSWORD: {% raw %}${{ secrets.DB_PASSWORD }}{% endraw %}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -229,6 +237,14 @@ jobs:
             export AWS_REGION='${AWS_REGION}'
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
+
+            # ---- Pasar configuración de BD al docker-compose ----
+            export DB_ENGINE='${DB_ENGINE}'
+            export DB_HOST='${DB_HOST}'
+            export DB_PORT='${DB_PORT}'
+            export DB_NAME='${DB_NAME}'
+            export DB_USER='${DB_USER}'
+            export DB_PASSWORD='${DB_PASSWORD}'
 
             # Aquí reconstruyo el host del registry a partir de la URL de ECR.
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"

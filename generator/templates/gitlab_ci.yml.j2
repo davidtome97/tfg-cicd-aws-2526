@@ -29,6 +29,8 @@ variables:
   # - ECR_REPOSITORY     (nombre del repositorio)
   # - EC2_HOST, EC2_USUARIO, EC2_LLAVE_SSH, EC2_KNOWN_HOSTS
 {% endif %}
+  # Variables genéricas de base de datos (se definen en Settings → CI/CD → Variables):
+  # - DB_ENGINE, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
 
 # ---------- DEFAULTS ----------
 default:
@@ -187,6 +189,14 @@ deploy_ec2:
       export AWS_REGION='${AWS_REGION}'
       export AWS_ECR_URL='${AWS_ECR_URL}'
       export ECR_REPOSITORY='${ECR_REPOSITORY}'
+
+      # ---- Configuración genérica de Base de Datos ----
+      export DB_ENGINE='${DB_ENGINE:-postgresql}'
+      export DB_HOST='${DB_HOST:-postgres-db}'
+      export DB_PORT='${DB_PORT:-5432}'
+      export DB_NAME='${DB_NAME:-tfg}'
+      export DB_USER='${DB_USER:-tfg}'
+      export DB_PASSWORD='${DB_PASSWORD:-tfg}'
 
       REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
       REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"

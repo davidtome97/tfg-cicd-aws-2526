@@ -63,6 +63,9 @@ jobs:
       - build_and_test
 
 
+    # Si he elegido que Sonar no rompa la pipeline, lo marco como "continue-on-error".
+    continue-on-error: true
+
     steps:
       - uses: actions/checkout@v4
 
@@ -155,6 +158,14 @@ jobs:
       EC2_LLAVE_SSH: ${{ secrets.EC2_LLAVE_SSH }}
       EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
 
+      # ---- Variables de Base de Datos (genéricas) ----
+      DB_ENGINE: ${{ secrets.DB_ENGINE }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -183,6 +194,14 @@ jobs:
             export AWS_REGION='${AWS_REGION}'
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
+
+            # ---- Pasar configuración de BD al docker-compose ----
+            export DB_ENGINE='${DB_ENGINE}'
+            export DB_HOST='${DB_HOST}'
+            export DB_PORT='${DB_PORT}'
+            export DB_NAME='${DB_NAME}'
+            export DB_USER='${DB_USER}'
+            export DB_PASSWORD='${DB_PASSWORD}'
 
             # Aquí reconstruyo el host del registry a partir de la URL de ECR.
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"

@@ -1,42 +1,39 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  db:
+  spring-app:
+    image: ${IMAGE_URI}
+    container_name: spring-app
+    ports:
+      - "80:8080"
+    environment:
+      #  CONFIG BBDD GENÉRICA
+      DB_ENGINE: ${DB_ENGINE:-postgresql}
+      DB_HOST: ${DB_HOST:-postgres-db}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-tfg}
+      DB_USER: ${DB_USER:-tfg}
+      DB_PASSWORD: ${DB_PASSWORD:-tfg}
+
+      SPRING_DATASOURCE_URL: "jdbc:${DB_ENGINE}://${DB_HOST}:${DB_PORT}/${DB_NAME}"
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+
+    depends_on:
+      - postgres-db
+
+  # ESTE SERVICIO SE USARÁ SOLO SI EL USUARIO USA POSTGRES LOCAL
+  postgres-db:
     image: postgres:15
     container_name: postgres-db
     environment:
-      POSTGRES_DB: sistemagestion
-      POSTGRES_USER: david
-      POSTGRES_PASSWORD: 1234
+      POSTGRES_DB: ${DB_NAME:-tfg}
+      POSTGRES_USER: ${DB_USER:-tfg}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tfg}
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  app:
-    # Aquí ya no construyo la imagen localmente; ahora uso directamente la imagen
-    # que yo mismo subo a ECR desde la pipeline.
-    # En el despliegue, exporto IMAGE_URI con el valor real del repositorio ECR.
-    image: "${IMAGE_URI}"
-    container_name: spring-app
-    depends_on:
-      - db
-    environment:
-      # Configuro mi aplicación Spring Boot para que se conecte al
-      # contenedor de PostgreSQL que levanto aquí mismo.
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sistemagestion
-      SPRING_DATASOURCE_USERNAME: david
-      SPRING_DATASOURCE_PASSWORD: 1234
-      SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SPRING_JPA_SHOW_SQL: "true"
-      # Si quisiera activar un perfil de Spring para producción, lo haría aquí:
-      # SPRING_PROFILES_ACTIVE: prod
-    ports:
-      - "80:8080"
-    # Si estoy usando Docker Compose v2.20+ puedo forzar siempre un pull de la imagen.
-    # pull_policy: always
-    restart: unless-stopped
+      - postgres-data:/var/lib/postgresql/data
 
 volumes:
-  postgres_data:
+  postgres-data:

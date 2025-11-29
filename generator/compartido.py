@@ -1,4 +1,3 @@
-# generator/shared_ci.py
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,16 +8,17 @@ from reportlab.lib.pagesizes import A4
 
 
 # ----------------------------------------------------------
-# FORMULARIO COMÚN (Sonar, AWS, base de datos)
+# FORMULARIO COMÚN (Sonar y AWS; sin preguntas de BD)
 # ----------------------------------------------------------
 def ask_common_ci_inputs(ci_platform: str) -> Dict:
     """
     Preguntas comunes para GitHub y GitLab:
     - SonarCloud
     - AWS (ECR + EC2)
-    - Uso de base de datos
+    (La parte de base de datos NO se pregunta: se asume que las variables
+     DB_* ya están definidas como secrets/variables en el repo.)
     """
-    print("\n=== Configuración común CI/CD (SonarCloud, AWS, BD) ===\n")
+    print("\n=== Configuración común CI/CD (SonarCloud, AWS) ===\n")
 
     # -------- SONAR --------
     use_sonar = (
@@ -128,18 +128,15 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                            or "EC2_LLAVE_SSH",
             }
 
-    # -------- BD (solo informativo) --------
-    use_db = (
-                     input("¿Tu proyecto usa base de datos? (s/n) [s]: ").strip().lower() or "s"
-             ) == "s"
-
+    # -------- RETURN COMÚN --------
+    # OJO: No devolvemos nada de BD; se asume que las variables DB_* existen
+    # en el repositorio y se documentan directamente en el PDF.
     return {
         "use_sonar": use_sonar,
         "fail_on_sonar": fail_on_sonar,
         "use_aws": use_aws,
         "deploy_mode": deploy_mode,
         "aws_secrets": aws_secrets,
-        "use_db": use_db,
         "ci_platform": ci_platform,
     }
 
@@ -158,6 +155,11 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
 
     use_sonar = config.get("use_sonar", False)
     use_aws = config.get("use_aws", False)
+
+    # Para este TFG asumimos SIEMPRE que hay base de datos y que las
+    # variables DB_* están definidas en el repositorio.
+    use_db = True
+
     aws_secrets_cfg: Dict = config.get("aws_secrets") or {}
 
     # -------- helpers internos --------
@@ -238,11 +240,11 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
 
     if is_github:
         paragraph(
-            f"¿Ejecuta en pull_request?: "
+            "¿Ejecuta en pull_request?: "
             f"{'sí' if config.get('run_on_pr') else 'no'}"
         )
         paragraph(
-            f"¿Proyecto con Node?: "
+            "¿Proyecto con Node?: "
             f"{'sí' if config.get('use_node') else 'no'}"
         )
     else:
@@ -250,6 +252,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
 
     paragraph(f"¿Incluye SonarCloud?: {'sí' if use_sonar else 'no'}")
     paragraph(f"¿Incluye deploy a AWS (ECR + EC2)?: {'sí' if use_aws else 'no'}")
+    paragraph(f"¿Usa base de datos?: {'sí' if use_db else 'no'}")
     line()
 
     # -------- SONAR --------
@@ -384,6 +387,59 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             secret_name = aws_secrets_cfg.get(key) or default_secret_names[key]
             secret_block(secret_name, examples[key], where_text[key])
 
+    # -------- BASE DE DATOS --------
+    if use_db:
+        subtitle("Variables necesarias para Base de Datos")
+
+        paragraph(
+            "Estas variables permiten conectar la aplicación con cualquier base de datos "
+            "externa (por ejemplo RDS en AWS) o interna (un contenedor Docker).",
+            indent=40,
+        )
+
+        engine = "postgresql"
+        host = "postgres-db"
+        port = "5432"
+        name = "tfg"
+        user = "tfg"
+        password_example = "********"
+
+        secret_block(
+            "DB_ENGINE",
+            engine,
+            "Motor de base de datos. Ejemplos: postgresql, mysql, mariadb, sqlserver, oracle.",
+        )
+        secret_block(
+            "DB_HOST",
+            host,
+            "Host o endpoint de la base de datos. Si usas Docker local: postgres-db. "
+            "Si usas RDS: copia el endpoint desde AWS RDS.",
+        )
+        secret_block(
+            "DB_PORT",
+            port,
+            "Puerto de conexión. Depende del motor: PostgreSQL=5432, MySQL/MariaDB=3306, "
+            "SQL Server=1433, etc.",
+        )
+        secret_block(
+            "DB_NAME",
+            name,
+            "Nombre de la base de datos. Lo defines al crear tu BD o lo lees del panel "
+            "de RDS/gestor de BBDD.",
+        )
+        secret_block(
+            "DB_USER",
+            user,
+            "Usuario con permisos para conectarse a la base de datos. En RDS lo defines "
+            "al crear la instancia.",
+        )
+        secret_block(
+            "DB_PASSWORD",
+            password_example,
+            "Password de acceso del usuario de base de datos. No se guarda en código, "
+            "solo en secrets/variables.",
+        )
+
     # -------- Cómo crear secrets/variables --------
     if is_github:
         subtitle("Cómo creo los secrets en GitHub")
@@ -394,10 +450,12 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
         paragraph(
             "4. En 'Name' escribo exactamente el nombre del secret que aparece "
             "en este documento (por ejemplo AWS_ACCESS_KEY_ID, EC2_LLAVE_SSH, "
-            "SONAR_HOST_URL, SONAR_PROJECT_KEY, SONAR_ORGANIZATION, SONAR_TOKEN, etc.)."
+            "SONAR_HOST_URL, SONAR_PROJECT_KEY, SONAR_ORGANIZATION, SONAR_TOKEN, "
+            "DB_ENGINE, DB_HOST, etc.)."
         )
         paragraph(
-            "5. En 'Secret' pego el valor real que he obtenido de AWS o de SonarCloud."
+            "5. En 'Secret' pego el valor real que he obtenido de AWS, SonarCloud "
+            "o del proveedor de base de datos."
         )
         paragraph(
             "6. Repito estos pasos para cada uno de los secrets hasta tenerlos todos creados."
@@ -411,10 +469,12 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
         paragraph(
             "4. En 'Key' escribo exactamente el nombre de la variable que aparece "
             "en este documento (por ejemplo AWS_ACCESS_KEY_ID, EC2_LLAVE_SSH, "
-            "SONAR_HOST_URL, SONAR_PROJECT_KEY, SONAR_ORGANIZATION, SONAR_TOKEN, etc.)."
+            "SONAR_HOST_URL, SONAR_PROJECT_KEY, SONAR_ORGANIZATION, SONAR_TOKEN, "
+            "DB_ENGINE, DB_HOST, etc.)."
         )
         paragraph(
-            "5. En 'Value' pego el valor real que he obtenido de AWS o de SonarCloud."
+            "5. En 'Value' pego el valor real que he obtenido de AWS, SonarCloud "
+            "o del proveedor de base de datos."
         )
         paragraph(
             "6. Marco 'Protected' y 'Masked' cuando corresponda y guardo la variable."
