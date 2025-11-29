@@ -4,7 +4,7 @@ name: CI-tfg-cicd-aws-2526
 # Disparadores del workflow
 # -----------------------------
 # Aquí defino cuándo quiero que se ejecute mi pipeline en GitHub Actions.
-# Dejo push, tags y PR opcional.
+# Dejo push, tags, PR opcional y ejecución manual (workflow_dispatch).
 
 # Primero calculo una sola vez la condición de despliegue que luego reutilizo.
 
@@ -27,6 +27,9 @@ on:
       - "main"
 
 
+
+  # Permite lanzar la pipeline a mano desde la UI de GitHub Actions
+  workflow_dispatch:
 
 jobs:
 
