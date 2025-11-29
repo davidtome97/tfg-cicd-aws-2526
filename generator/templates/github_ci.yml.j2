@@ -117,12 +117,14 @@ jobs:
         # Aquí ejecuto el análisis de calidad con SonarCloud.
         env:
           SONAR_TOKEN: {% raw %}${{ secrets.SONAR_TOKEN }}{% endraw %}
-          SONAR_HOST_URL: "{{ config.sonar.host or 'https://sonarcloud.io' }}"
+          SONAR_HOST_URL: {% raw %}${{ secrets.SONAR_HOST_URL }}{% endraw %}
+          SONAR_PROJECT_KEY: {% raw %}${{ secrets.SONAR_PROJECT_KEY }}{% endraw %}
+          SONAR_ORGANIZATION: {% raw %}${{ secrets.SONAR_ORGANIZATION }}{% endraw %}
         run: |
           ./mvnw -B verify sonar:sonar \
-          -Dsonar.projectKey={{ config.sonar.project_key }} \
-          -Dsonar.organization={{ config.sonar.organization }} \
-          -Dsonar.host.url={{ config.sonar.host or 'https://sonarcloud.io' }}
+            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+            -Dsonar.organization=${SONAR_ORGANIZATION} \
+            -Dsonar.host.url=${SONAR_HOST_URL}
 {% endif %}
 
 {% if config.use_aws %}
