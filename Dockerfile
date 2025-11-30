@@ -11,11 +11,11 @@ COPY . .
 # Uso mvn para evitar que lea .mvn/maven.config
 RUN mvn -B -DskipTests -f app/pom.xml package
 
-########## Etapa de runtime (JRE ligero) ##########
+# Etapa de runtime
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Copiamos el JAR ya construido desde la etapa anterior
+# Copio el JAR ya construido desde la etapa anterior
 COPY --from=build /workspace/app/target/*.jar /app/app.jar
 
 # Puerto por defecto de Spring Boot

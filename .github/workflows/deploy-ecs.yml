@@ -1,14 +1,15 @@
 name: Despliegue a EC2
 
 on:
-  workflow_dispatch:              # lo puedo lanzar a mano desde Actions
+  workflow_dispatch:              # Lo puedo lanzar a mano desde Actions.
     inputs:
       etiqueta_imagen:
-        description: "Etiqueta de la imagen Docker (opcional)"
+        description: "Etiqueta de la imagen Docker "
         required: false
   push:
     tags:
-      - "v*.*.*"                  # también se dispara al crear un tag tipo v0.1.0
+      # También se dispara cuando creo un tag tipo v0.1.0.
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -19,11 +20,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Traigo el código del repo
+      # Traigo el código del repo para tener el Dockerfile y el compose.
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2) Credenciales AWS para usar ECR desde el runner
+      # ahora configuro las credenciales de AWS para poder usar ECR desde el runner.
       - name: Configurar AWS
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -31,12 +32,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 3) Login en ECR (en el runner) para poder hacer push
+      # despues hago login en ECR en el runner para poder hacer push de la imagen.
       - name: Login en ECR
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # 4) Me aseguro de que el repo ECR existe (si no, lo creo)
+      # en esta parte me aseguro de que el repositorio de ECR exista; si no, lo creo.
       - name: Asegurar repositorio ECR
         run: |
           REGISTRO="${{ steps.ecr.outputs.registry }}"
@@ -46,7 +47,8 @@ jobs:
           || aws ecr create-repository --repository-name "$REPO" >/dev/null
           echo "Repositorio ECR listo: $REPO (Registry: $REGISTRO)"
 
-      # 5) Calculo etiqueta de la imagen (si no paso input, uso el tag del push)
+      # creo/calculo la etiqueta que voy a usar para la imagen.
+      #    Si no me pasan nada por input, uso el nombre del tag del push.
       - name: Calcular etiqueta
         id: vars
         run: |
@@ -56,7 +58,7 @@ jobs:
             echo "etiqueta=${{ github.event.inputs.etiqueta_imagen }}" >> $GITHUB_OUTPUT
           fi
 
-      # 6) Build + push de la imagen a ECR (con Dockerfile de la raíz)
+      # ya construyo la imagen y la subo a ECR usando el Dockerfile de la raíz.
       - name: Build y push de imagen
         id: push
         run: |
@@ -68,7 +70,7 @@ jobs:
           docker push "$IMAGEN"
           echo "imagen=$IMAGEN" >> $GITHUB_OUTPUT
 
-      # 7) Copio el docker-compose del deploy a la EC2 (lo dejo en ~/app/)
+      # copio el docker-compose que uso para el deploy a la EC2 (lo dejo en ~/app/).
       - name: Copiar docker-compose.yml a EC2
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -77,14 +79,14 @@ jobs:
           key: ${{ secrets.EC2_LLAVE_SSH }}
           source: "infra/ec2/docker-compose.yml"
           target: "~/app"
-          strip_components: 2    # quito "infra/ec2" y dejo el archivo plano en ~/app/
-          overwrite: true        # si ya está, lo sobrescribo
-          timeout: 120s          # más margen por si la red va lenta
+          strip_components: 2
+          overwrite: true       # Si ya existe, lo sobreescribo.
+          timeout: 120s         # Un poco más de margen por si la red va lenta.
 
-      # 8) Me conecto por SSH a la EC2, hago login en ECR allí y levanto el compose
+      # aqui me conecto por SSH a la EC2, hago login en ECR allí y levanto el docker-compose.
       - name: Ejecutar deploy en EC2
         uses: appleboy/ssh-action@v1.0.3
-        # le paso las creds AWS al paso SSH para que la EC2 pueda loguearse en ECR
+        # le paso las credenciales de AWS como variables de entorno al script de la EC2.
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -99,7 +101,7 @@ jobs:
             mkdir -p ~/app
             cd ~/app
 
-            # (una sola vez) Instalo AWS CLI si no está
+            # Instalo AWS CLI en la EC2 solo la primera vez si todavía no está.
             if ! command -v aws >/dev/null 2>&1; then
               echo "Instalando AWS CLI en la EC2..."
               sudo apt-get update -y
@@ -111,17 +113,17 @@ jobs:
             fi
             aws --version
 
-            # Login en ECR con las creds que acabo de pasar como envs
+            # Hago login en ECR dentro de la EC2 usando las credenciales que he pasado.
             REGISTRY="${{ steps.ecr.outputs.registry }}"
             echo "Login en ECR: $REGISTRY"
             aws ecr get-login-password --region "$AWS_REGION" \
               | docker login --username AWS --password-stdin "$REGISTRY"
 
-            # Imagen publicada en el paso de build
+            # Imagen que he publicado en el paso anterior del workflow.
             export IMAGEN="${{ steps.push.outputs.imagen }}"
             echo "Usando imagen: $IMAGEN"
 
-            # Por si el compose llegó dentro de carpetas, lo plano en ~/app
+            # Por si el compose se ha quedado dentro de carpetas, me aseguro de tenerlo plano.
             test -f docker-compose.yml || { 
               if [ -f infra/ec2/docker-compose.yml ]; then
                 mv infra/ec2/docker-compose.yml docker-compose.yml && rm -rf infra;
@@ -130,14 +132,14 @@ jobs:
               fi
             }
 
-            # Actualizo .env con la imagen que quiero desplegar (simple y explícito)
+            # Actualizo el .env con la imagen que quiero desplegar.
             grep -v '^IMAGEN=' .env 2>/dev/null | cat > .env.tmp || true
             echo "IMAGEN=$IMAGEN" >> .env.tmp
             mv .env.tmp .env
 
-            # Pull y arranque del contenedor
+            # Actualizo los contenedores con docker compose y levanto la nueva versión.
             docker compose pull
             docker compose up -d
 
-            # Limpieza de imágenes antiguas para ahorrar disco
+            # Limpio imágenes antiguas para no llenar el disco de la instancia.
             docker image prune -f

@@ -4,17 +4,17 @@ name: CI-{{ config.project_name }}
 # Disparadores del workflow
 # -----------------------------
 # Aquí defino cuándo quiero que se ejecute mi pipeline en GitHub Actions.
-# Dejo push, tags, PR opcional y ejecución manual (workflow_dispatch).
+# Dejo push, tags y PR opcional.
 
 # Primero calculo una sola vez la condición de despliegue que luego reutilizo.
 {% if config.deploy_mode == 'tag' %}
-{%   set deploy_condition = "startsWith(github.ref, 'refs/tags/')" %}
+{% set deploy_condition = "startsWith(github.ref, 'refs/tags/')" %}
 {% elif config.deploy_mode == 'main' %}
-{%   set deploy_condition = "github.ref == 'refs/heads/main'" %}
+{% set deploy_condition = "github.ref == 'refs/heads/main'" %}
 {% elif config.deploy_mode == 'manual' %}
-{%   set deploy_condition = "github.event_name == 'workflow_dispatch'" %}
+{% set deploy_condition = "github.event_name == 'workflow_dispatch'" %}
 {% else %}
-{%   set deploy_condition = "true" %}
+{% set deploy_condition = "true" %}
 {% endif %}
 
 on:
@@ -29,13 +29,10 @@ on:
 {% if config.run_on_pr %}
   pull_request:
     branches:
-{%   for b in config.branches %}
+{% for b in config.branches %}
       - "{{ b }}"
-{%   endfor %}
+{% endfor %}
 {% endif %}
-
-  # Permite lanzar la pipeline a mano desde la UI de GitHub Actions
-  workflow_dispatch:
 
 jobs:
 {% if config.use_node %}
@@ -100,13 +97,13 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_and_test
-{%   if config.use_node %}
+{% if config.use_node %}
       - node_build
-{%   endif %}
-{%   if not config.fail_on_sonar %}
+{% endif %}
+{% if not config.fail_on_sonar %}
     # Si he elegido que Sonar no rompa la pipeline, lo marco como "continue-on-error".
     continue-on-error: true
-{%   endif %}
+{% endif %}
     steps:
       - uses: actions/checkout@v4
 
@@ -138,12 +135,12 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build_and_test
-{%   if config.use_node %}
+{% if config.use_node %}
       - node_build
-{%   endif %}
-{%   if config.use_sonar %}
+{% endif %}
+{% if config.use_sonar %}
       - sonar
-{%   endif %}
+{% endif %}
     # Modo de despliegue (reutilizo la misma condición en todos los deploys).
     if: {{ deploy_condition }}
 
