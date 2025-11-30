@@ -1,12 +1,10 @@
 name: CI-tfg-cicd-aws-2526
 
-# -----------------------------
-# Disparadores del workflow
-# -----------------------------
-# Aquí defino cuándo quiero que se ejecute mi pipeline en GitHub Actions.
-# Dejo push, tags y PR opcional.
+# Aquí dejo definido el nombre del workflow usando el nombre del proyecto que pasé en el formulario.
 
-# Primero calculo una sola vez la condición de despliegue que luego reutilizo.
+# En esta parte calculo una variable interna (deploy_condition) que luego reutilizo
+# para simplificar el código de las condiciones de despliegue.
+# De esta forma no tengo que repetir la expresión en cada job.
 
 
 
@@ -15,8 +13,10 @@ on:
   push:
     branches:
 
+      # Aquí añado las ramas que quiero que activen la pipeline cuando hago push.
       - "main"
 
+    # También dejo activado para que se ejecute en cualquier tag.
     tags:
       - "*"
 
@@ -24,16 +24,18 @@ on:
   pull_request:
     branches:
 
+      # Si he marcado la opción de ejecutarse en PR, dejo las mismas ramas.
       - "main"
 
 
 
+  # También permito ejecutar la pipeline manualmente desde la UI de GitHub.
+  workflow_dispatch:
+
 jobs:
 
 
-  # ======================================================
-  # JOB: Build & Test Java (Maven)
-  # ======================================================
+  # Job principal de Java/Maven. Aquí compilo y ejecuto los tests del backend.
   build_and_test:
     runs-on: ubuntu-latest
 
@@ -41,19 +43,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Java (Temurin 17)
-        # Uso Java 17 para compilar mi proyecto.
+        # Uso Java 17 porque es la versión LTS más utilizada en entornos actuales.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Build & Test (Maven)
+        # Aquí lanzo Maven con los tests.
         run: ./mvnw -B -f pom.xml test
 
 
-  # ======================================================
-  # JOB: SonarCloud
-  # ======================================================
+
+  # Job de SonarCloud. Lo dejo separado para que solo dependa del build.
   sonar:
     runs-on: ubuntu-latest
     needs:
@@ -64,13 +66,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Java
+        # Sonar utiliza Java, así que vuelvo a configurar Java 17.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: SonarCloud Analysis
-        # Aquí ejecuto el análisis de calidad con SonarCloud.
+        # Ejecuto el análisis de calidad desde Maven.
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -84,9 +87,8 @@ jobs:
 
 
 
-  # ======================================================
-  # JOB: Deploy a AWS ECR (Build & Push Docker)
-  # ======================================================
+
+  # Job para construir la imagen Docker y subirla a ECR.
   deploy:
     runs-on: ubuntu-latest
     needs:
@@ -95,14 +97,14 @@ jobs:
 
       - sonar
 
-    # Modo de despliegue (reutilizo la misma condición en todos los deploys).
+    # Solo despliego si se cumple la condición configurada en el formulario.
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Configurar credenciales AWS
-        # Aquí hago login en AWS con un usuario IAM que tiene permisos en ECR/EC2.
+        # Aquí hago login en AWS con un IAM que solo usa ECR/EC2 para despliegues.
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -113,7 +115,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & Push Docker
-        # Aquí construyo la imagen Docker y la subo a ECR con dos tags: SHA y latest.
+        # Construyo la imagen, la taggeo con el commit y con 'latest', y la subo a ECR.
         env:
           ECR_REGISTRY: ${{ secrets.AWS_ECR_URL }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
@@ -123,25 +125,21 @@ jobs:
           echo "Construyendo imagen $IMAGE_URI"
 
           docker build -t "$IMAGE_URI" .
-
-          # También publico una etiqueta 'latest' para que la EC2 tire siempre de la última versión.
           docker tag "$IMAGE_URI" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
           docker push "$IMAGE_URI"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-          echo "Imágenes publicadas correctamente en ECR"
+          echo "Imágenes subidas correctamente"
 
-  # ======================================================
-  # JOB: Deploy en EC2
-  # ======================================================
+  # Job final: hace el despliegue real en la instancia EC2.
   deploy_ec2:
     runs-on: ubuntu-latest
     needs: deploy
-    # Reutilizo exactamente la misma condición de despliegue que en 'deploy'.
     if: startsWith(github.ref, 'refs/tags/')
 
     env:
+      # Credenciales y configuración para entrar a la EC2 y pasar variables al docker-compose.
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -152,11 +150,19 @@ jobs:
       EC2_LLAVE_SSH: ${{ secrets.EC2_LLAVE_SSH }}
       EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
 
+      # Variables de base de datos que luego usaré en docker-compose.
+      DB_ENGINE: ${{ secrets.DB_ENGINE }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Preparar clave SSH
-        # Aquí preparo la clave privada y el known_hosts para poder conectarme por SSH.
+        # Aquí preparo la clave privada y known_hosts para poder conectarme sin problemas.
         run: |
           mkdir -p ~/.ssh
           printf "%s" "${EC2_LLAVE_SSH}" > ~/.ssh/id_rsa
@@ -169,10 +175,11 @@ jobs:
           fi
 
       - name: Subir docker-compose.yml a EC2
+        # Subo el docker-compose al directorio ~/app de la máquina.
         run: scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "$EC2_USER@$EC2_HOST:~/app/docker-compose.yml"
 
       - name: Ejecutar despliegue en EC2
-        # Aquí hago el pull de la imagen y levanto los contenedores en la EC2.
+        # Aquí hago login en ECR, actualizo contenedores y limpio imágenes antiguas.
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -e
@@ -181,11 +188,19 @@ jobs:
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-            # Aquí reconstruyo el host del registry a partir de la URL de ECR.
+            # Paso las variables de base de datos al entorno
+            export DB_ENGINE='${DB_ENGINE}'
+            export DB_HOST='${DB_HOST}'
+            export DB_PORT='${DB_PORT}'
+            export DB_NAME='${DB_NAME}'
+            export DB_USER='${DB_USER}'
+            export DB_PASSWORD='${DB_PASSWORD}'
+
+            # Construyo el host del registry
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
             REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
 
-            # Y aquí construyo IMAGE_URI, que es lo que usa mi docker-compose.yml.
+            # Imagen que usarán los servicios del docker-compose
             export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
 
             echo 'Haciendo login en ECR desde la EC2'

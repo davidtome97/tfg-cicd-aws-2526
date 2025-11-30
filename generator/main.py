@@ -5,6 +5,8 @@ from gitlab_generator import GitLabWorkflowGenerator
 def ask_platform() -> str:
     print("=== Generador de Workflows CI/CD ===\n")
     platform = ""
+    # Aquí pregunto al usuario para qué plataforma quiere generar la CI/CD.
+    # Repito la pregunta hasta que me dé un valor válido.
     while platform not in ("github", "gitlab"):
         platform = (
             input("¿Para qué plataforma quieres generar CI/CD? (github/gitlab): ")
@@ -15,8 +17,10 @@ def ask_platform() -> str:
 
 
 def main() -> None:
+    # Primero pregunto qué plataforma ha elegido el usuario.
     platform = ask_platform()
 
+    # Según la opción elegida, instancio el generador correspondiente.
     if platform == "github":
         generator = GitHubWorkflowGenerator()
         generator.run()
@@ -26,4 +30,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()# test pipelines dual GitHub + GitLab
+    # Ejecuto el main cuando lanzo este archivo directamente.
+    main()
+
