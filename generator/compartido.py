@@ -7,26 +7,25 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
 
-# ----------------------------------------------------------
-# FORMULARIO COMÚN (Sonar y AWS; sin preguntas de BD)
-# ----------------------------------------------------------
+# Aquí tengo el formulario común que uso tanto para GitHub como para GitLab.
 def ask_common_ci_inputs(ci_platform: str) -> Dict:
     """
     Preguntas comunes para GitHub y GitLab:
     - SonarCloud
     - AWS (ECR + EC2)
-    (La parte de base de datos NO se pregunta: se asume que las variables
-     DB_* ya están definidas como secrets/variables en el repo.)
+    - doy por hecho que las variables DB_* ya existen como secrets/variables en el repo.
     """
     print("\n=== Configuración común CI/CD (SonarCloud, AWS) ===\n")
 
-    # -------- SONAR --------
+    # PARTE DE SONAR
+    # Primero pregunto si quiero activar SonarCloud en la pipeline.
     use_sonar = (
                         input("¿Incluir análisis SonarCloud? (s/n) [s]: ").strip().lower() or "s"
                 ) == "s"
 
     fail_on_sonar = False
     if use_sonar:
+        # Aquí decido si quiero que la pipeline falle cuando el Quality Gate no pasa.
         fail_on_sonar = (
                                 input(
                                     "Si falla el Quality Gate de Sonar, ¿quiero que se ROMPA la pipeline? "
@@ -35,7 +34,8 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                                 or "n"
                         ) == "s"
 
-    # -------- AWS --------
+    # PARTE DE AWS
+    # Ahora pregunto si quiero añadir el despliegue completo a AWS (ECR + EC2).
     use_aws = (
                       input("¿Añadir deploy completo a AWS (ECR + EC2)? (s/n) [n]: ")
                       .strip()
@@ -52,8 +52,10 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
         print(" 2) Solo con tag (release)")
         print(" 3) Solo manual (desde la UI de CI/CD)")
         opcion = input("Elige 1/2/3 [2]: ").strip() or "2"
+        # Mapeo la opción a un modo de despliegue interno.
         deploy_mode = {"1": "main", "2": "tag", "3": "manual"}.get(opcion, "tag")
 
+        # adaptado el mensaje según la plataforma donde vaya a configurar las variables.
         if ci_platform == "github":
             print(
                 "\nPara AWS voy a usar NOMBRES de secrets de GitHub.\n"
@@ -65,6 +67,7 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                 "Luego tendré que crear esas variables con sus valores reales en GitLab."
             )
 
+        # Aquí decido si quiero usar los nombres estándar o personalizarlos.
         usar_defectos = (
                                 input(
                                     "¿Usar nombres estándar "
@@ -75,6 +78,7 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                         ) == "s"
 
         if usar_defectos:
+            # Si tiro por defecto, dejo todos los nombres típicos que suelo usar.
             aws_secrets = {
                 "access_key": "AWS_ACCESS_KEY_ID",
                 "secret_key": "AWS_SECRET_ACCESS_KEY",
@@ -86,6 +90,7 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                 "ec2_key": "EC2_LLAVE_SSH",
             }
         else:
+            # Si no uso los por defecto, aquí puedo personalizar cada nombre.
             print(
                 "\nIntroduzco los NOMBRES de los secrets/variables (no sus valores). "
                 "Si dejo algo vacío, uso el nombre por defecto entre paréntesis."
@@ -128,9 +133,7 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
                            or "EC2_LLAVE_SSH",
             }
 
-    # -------- RETURN COMÚN --------
-    # OJO: No devolvemos nada de BD; se asume que las variables DB_* existen
-    # en el repositorio y se documentan directamente en el PDF.
+    # Aquí paso todo lo necesario para generar las plantillas.
     return {
         "use_sonar": use_sonar,
         "fail_on_sonar": fail_on_sonar,
@@ -141,28 +144,26 @@ def ask_common_ci_inputs(ci_platform: str) -> Dict:
     }
 
 
-# ----------------------------------------------------------
-# PDF COMÚN (GitHub / GitLab)
-# ----------------------------------------------------------
+# Aquí tengo la parte común que genera el PDF para GitHub y GitLab.
 def create_common_pdf(config: Dict, pdf_path: Path) -> None:
+    # miro si estoy generando para GitHub o GitLab solo para adaptar algunos textos.
     ci_platform = config.get("ci_platform", "github")
     is_github = ci_platform == "github"
     plataforma_txt = "GitHub Actions" if is_github else "GitLab CI/CD"
 
+    # Configuración básica del PDF.
     c = canvas.Canvas(str(pdf_path), pagesize=A4)
     width, height = A4
-    y = height - 50
+    y = height - 50  # Empiezo a escribir un poco por debajo del borde superior.
 
     use_sonar = config.get("use_sonar", False)
     use_aws = config.get("use_aws", False)
 
-    # Para este TFG asumimos SIEMPRE que hay base de datos y que las
-    # variables DB_* están definidas en el repositorio.
+    # Para el TFG asumo siempre que hay BD y que las variables DB_* existen.
     use_db = True
 
     aws_secrets_cfg: Dict = config.get("aws_secrets") or {}
 
-    # -------- helpers internos --------
     def new_page():
         nonlocal y
         c.showPage()
@@ -193,6 +194,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
         y -= 12
 
     def wrap_text(text: str, max_width: int = 90):
+        # Pequeño ajuste para que las líneas de texto no se salgan horizontalmente.
         words = text.split()
         lines = []
         current = []
@@ -220,6 +222,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             y -= step
 
     def secret_block(nombre: str, ejemplo: str, donde: str):
+        # conjunto de código común para documentar cada secret/variable en el PDF.
         nonlocal y
         if y < 120:
             new_page()
@@ -231,7 +234,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
         line()
         y -= 4
 
-    # -------- cabecera --------
+    #  cabecera
     title(f"Resumen del workflow generado para {plataforma_txt}")
 
     ramas_txt = ", ".join(config.get("branches", [])) or "-"
@@ -248,24 +251,25 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             f"{'sí' if config.get('use_node') else 'no'}"
         )
     else:
-        paragraph("¿Proyecto con Node?: no (no configurado en este generador)")
+        # En GitLab, de momento no genero jobs con Node en este proyecto, ya que no tiene
+        paragraph("¿Proyecto con Node?: no ")
 
     paragraph(f"¿Incluye SonarCloud?: {'sí' if use_sonar else 'no'}")
     paragraph(f"¿Incluye deploy a AWS (ECR + EC2)?: {'sí' if use_aws else 'no'}")
     paragraph(f"¿Usa base de datos?: {'sí' if use_db else 'no'}")
     line()
 
-    # -------- SONAR --------
+    #  SONAR
     if use_sonar:
         subtitle("Secrets/variables necesarios para SonarCloud")
 
         paragraph(
             "Variables necesarias para que el análisis de SonarCloud funcione "
-            "dentro de la pipeline. Uso los mismos nombres en GitHub y GitLab "
-            "para no duplicar trabajo.",
+            "dentro de la pipeline.",
             indent=40,
         )
 
+        # Ejemplos de valores típicos para documentar en el PDF.
         sonar_host = "https://sonarcloud.io"
         sonar_project_key = "mi-proyecto_en_sonar"
         sonar_org = "mi-organizacion"
@@ -298,7 +302,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "en este secret/variable.",
         )
 
-    # -------- AWS --------
+    # PARTE DE AWS
     if use_aws:
         subtitle("Secrets/variables necesarios para AWS (ECR + EC2)")
 
@@ -308,6 +312,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             indent=40,
         )
 
+        # Nombres por defecto que le pongo para las variables AWS.
         default_secret_names = {
             "access_key": "AWS_ACCESS_KEY_ID",
             "secret_key": "AWS_SECRET_ACCESS_KEY",
@@ -319,6 +324,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "ec2_key": "EC2_LLAVE_SSH",
         }
 
+        # Ejemplos de valores para que el PDF.
         examples = {
             "access_key": "AKIAIOSFODNN7EXAMPLE",
             "secret_key": "wJalrXUtnF/.../KEY",
@@ -330,6 +336,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "ec2_key": "-----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----",
         }
 
+        # descripcion de donde busco cada valor de variable
         where_text = {
             "access_key": (
                 "En AWS Console entro a IAM → Users, selecciono mi usuario y en la pestaña "
@@ -383,11 +390,12 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "ec2_key",
         ]
 
+        # Recorro todas las variables de AWS en un orden fijo para el PDF.
         for key in ordered_keys:
             secret_name = aws_secrets_cfg.get(key) or default_secret_names[key]
             secret_block(secret_name, examples[key], where_text[key])
 
-    # -------- BASE DE DATOS --------
+    # PARTE DE LA BASE DE DATOS
     if use_db:
         subtitle("Variables necesarias para Base de Datos")
 
@@ -397,6 +405,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             indent=40,
         )
 
+        # Ejemplos de valores por defecto que uso en mi proyecto.
         engine = "postgresql"
         host = "postgres-db"
         port = "5432"
@@ -440,7 +449,7 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "solo en secrets/variables.",
         )
 
-    # -------- Cómo crear secrets/variables --------
+    # PARTE DE Cómo crear secrets/variables
     if is_github:
         subtitle("Cómo creo los secrets en GitHub")
 
@@ -480,4 +489,5 @@ def create_common_pdf(config: Dict, pdf_path: Path) -> None:
             "6. Marco 'Protected' y 'Masked' cuando corresponda y guardo la variable."
         )
 
+    # Cierro y guardo el PDF en disco.
     c.save()

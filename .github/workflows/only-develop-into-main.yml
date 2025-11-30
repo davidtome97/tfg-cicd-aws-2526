@@ -1,9 +1,10 @@
 name: protect-main (only allow PRs from develop)
 
-# Este workflow se ejecutará automáticamente cuando alguien abra un Pull Request hacia 'main'
+# Este workflow se ejecuta automáticamente cuando alguien abre un PR hacia main.
 on:
   pull_request:
     branches: [ main ]
+    # Lo disparo cuando se crea el PR, cuando se actualiza o cuando se reabre.
     types: [opened, synchronize, reopened]
 
 jobs:
@@ -12,13 +13,13 @@ jobs:
     steps:
       - name: Check PR source branch
         run: |
-          # Muestro por consola la rama destino y la rama origen del Pull Request
+          # Muestro por consola la rama destino y la rama origen del PR para tenerlo claro.
           echo "Base branch  : ${{ github.base_ref }}"
           echo "Source branch: ${{ github.head_ref }}"
 
-          # Regla de seguridad: solo se permiten PRs a 'main' si vienen desde 'develop'
+          # Regla que quiero aplicar: solo acepto PRs hacia main si vienen de develop.
           if [[ "${{ github.head_ref }}" != "develop" ]]; then
             echo "::error::Solo se permiten PRs a 'main' desde 'develop'."
             echo "::error::Rama origen actual: '${{ github.head_ref }}'"
-            exit 1
+            exit 1   # Fuerzo fallo del workflow para bloquear el PR.
           fi

@@ -1,12 +1,10 @@
 name: CI-{{ config.project_name }}
 
-# -----------------------------
-# Disparadores del workflow
-# -----------------------------
-# Aquí defino cuándo quiero que se ejecute mi pipeline en GitHub Actions.
-# Dejo push, tags, PR opcional y ejecución manual (workflow_dispatch).
+# Aquí dejo definido el nombre del workflow usando el nombre del proyecto que pasé en el formulario.
 
-# Primero calculo una sola vez la condición de despliegue que luego reutilizo.
+# En esta parte calculo una variable interna (deploy_condition) que luego reutilizo
+# para simplificar el código de las condiciones de despliegue.
+# De esta forma no tengo que repetir la expresión en cada job.
 {% if config.deploy_mode == 'tag' %}
 {%   set deploy_condition = "startsWith(github.ref, 'refs/tags/')" %}
 {% elif config.deploy_mode == 'main' %}
@@ -21,8 +19,10 @@ on:
   push:
     branches:
 {% for b in config.branches %}
+      # Aquí añado las ramas que quiero que activen la pipeline cuando hago push.
       - "{{ b }}"
 {% endfor %}
+    # También dejo activado para que se ejecute en cualquier tag.
     tags:
       - "*"
 
@@ -30,25 +30,26 @@ on:
   pull_request:
     branches:
 {%   for b in config.branches %}
+      # Si he marcado la opción de ejecutarse en PR, dejo las mismas ramas.
       - "{{ b }}"
 {%   endfor %}
 {% endif %}
 
-  # Permite lanzar la pipeline a mano desde la UI de GitHub Actions
+  # También permito ejecutar la pipeline manualmente desde la UI de GitHub.
   workflow_dispatch:
 
 jobs:
 {% if config.use_node %}
-  # ======================================================
-  # JOB: Node.js (solo si uso Node)
-  # ======================================================
+
+  # Job opcional de Node.js (solo lo genero si el proyecto lo necesita).
+  # Lo uso para instalar dependencias, ejecutar tests y el linter si lo tengo.
   node_build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        # Aquí instalo Node porque mi proyecto también lo necesita.
+        # Instalo Node 20 porque es la versión recomendada ahora mismo.
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -57,11 +58,11 @@ jobs:
         run: npm install
 
       - name: Ejecutar tests Node
-        # Si no tengo tests configurados, no quiero que falle toda la pipeline.
+        # Si no tengo tests no quiero que me reviente la pipeline, así que ignoro el error.
         run: npm test || echo "No tengo tests de Node configurados, continúo."
 
       - name: Linter (npm run lint)
-        # Esto solo se ejecuta si tengo definido "lint" en package.json.
+        # Solo ejecuto lint si existe el script en package.json.
         run: |
           if npm run | grep -q lint; then
             npm run lint
@@ -70,32 +71,30 @@ jobs:
           fi
 {% endif %}
 
-  # ======================================================
-  # JOB: Build & Test Java (Maven)
-  # ======================================================
+  # Job principal de Java/Maven. Aquí compilo y ejecuto los tests del backend.
   build_and_test:
     runs-on: ubuntu-latest
 {% if config.use_node %}
-    # Si tengo Node, primero quiero que se construya el frontend.
+    # Si tengo Node, primero necesito generar el frontend, así que lo pongo como dependencia.
     needs: node_build
 {% endif %}
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Java (Temurin 17)
-        # Uso Java 17 para compilar mi proyecto.
+        # Uso Java 17 porque es la versión LTS más utilizada en entornos actuales.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: Build & Test (Maven)
+        # Aquí lanzo Maven con los tests.
         run: ./mvnw -B -f pom.xml test
 
 {% if config.use_sonar %}
-  # ======================================================
-  # JOB: SonarCloud
-  # ======================================================
+
+  # Job de SonarCloud. Lo dejo separado para que solo dependa del build.
   sonar:
     runs-on: ubuntu-latest
     needs:
@@ -104,20 +103,21 @@ jobs:
       - node_build
 {%   endif %}
 {%   if not config.fail_on_sonar %}
-    # Si he elegido que Sonar no rompa la pipeline, lo marco como "continue-on-error".
+    # Si no quiero que Sonar rompa la pipeline, activo continue-on-error.
     continue-on-error: true
 {%   endif %}
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Java
+        # Sonar utiliza Java, así que vuelvo a configurar Java 17.
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
       - name: SonarCloud Analysis
-        # Aquí ejecuto el análisis de calidad con SonarCloud.
+        # Ejecuto el análisis de calidad desde Maven.
         env:
           SONAR_TOKEN: {% raw %}${{ secrets.SONAR_TOKEN }}{% endraw %}
           SONAR_HOST_URL: {% raw %}${{ secrets.SONAR_HOST_URL }}{% endraw %}
@@ -131,9 +131,8 @@ jobs:
 {% endif %}
 
 {% if config.use_aws %}
-  # ======================================================
-  # JOB: Deploy a AWS ECR (Build & Push Docker)
-  # ======================================================
+
+  # Job para construir la imagen Docker y subirla a ECR.
   deploy:
     runs-on: ubuntu-latest
     needs:
@@ -144,14 +143,14 @@ jobs:
 {%   if config.use_sonar %}
       - sonar
 {%   endif %}
-    # Modo de despliegue (reutilizo la misma condición en todos los deploys).
+    # Solo despliego si se cumple la condición configurada en el formulario.
     if: {{ deploy_condition }}
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Configurar credenciales AWS
-        # Aquí hago login en AWS con un usuario IAM que tiene permisos en ECR/EC2.
+        # Aquí hago login en AWS con un IAM que solo usa ECR/EC2 para despliegues.
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: {% raw %}${{ secrets.AWS_ACCESS_KEY_ID }}{% endraw %}
@@ -162,7 +161,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & Push Docker
-        # Aquí construyo la imagen Docker y la subo a ECR con dos tags: SHA y latest.
+        # Construyo la imagen, la taggeo con el commit y con 'latest', y la subo a ECR.
         env:
           ECR_REGISTRY: {% raw %}${{ secrets.AWS_ECR_URL }}{% endraw %}
           ECR_REPOSITORY: {% raw %}${{ secrets.ECR_REPOSITORY }}{% endraw %}
@@ -172,25 +171,21 @@ jobs:
           echo "Construyendo imagen $IMAGE_URI"
 
           docker build -t "$IMAGE_URI" .
-
-          # También publico una etiqueta 'latest' para que la EC2 tire siempre de la última versión.
           docker tag "$IMAGE_URI" "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
           docker push "$IMAGE_URI"
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-          echo "Imágenes publicadas correctamente en ECR"
+          echo "Imágenes subidas correctamente"
 
-  # ======================================================
-  # JOB: Deploy en EC2
-  # ======================================================
+  # Job final: hace el despliegue real en la instancia EC2.
   deploy_ec2:
     runs-on: ubuntu-latest
     needs: deploy
-    # Reutilizo exactamente la misma condición de despliegue que en 'deploy'.
     if: {{ deploy_condition }}
 
     env:
+      # Credenciales y configuración para entrar a la EC2 y pasar variables al docker-compose.
       AWS_ACCESS_KEY_ID: {% raw %}${{ secrets.AWS_ACCESS_KEY_ID }}{% endraw %}
       AWS_SECRET_ACCESS_KEY: {% raw %}${{ secrets.AWS_SECRET_ACCESS_KEY }}{% endraw %}
       AWS_REGION: {% raw %}${{ secrets.AWS_REGION }}{% endraw %}
@@ -201,7 +196,7 @@ jobs:
       EC2_LLAVE_SSH: {% raw %}${{ secrets.EC2_LLAVE_SSH }}{% endraw %}
       EC2_KNOWN_HOSTS: {% raw %}${{ secrets.EC2_KNOWN_HOSTS }}{% endraw %}
 
-      # ---- Variables de Base de Datos (genéricas) ----
+      # Variables de base de datos que luego usaré en docker-compose.
       DB_ENGINE: {% raw %}${{ secrets.DB_ENGINE }}{% endraw %}
       DB_HOST: {% raw %}${{ secrets.DB_HOST }}{% endraw %}
       DB_PORT: {% raw %}${{ secrets.DB_PORT }}{% endraw %}
@@ -213,7 +208,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Preparar clave SSH
-        # Aquí preparo la clave privada y el known_hosts para poder conectarme por SSH.
+        # Aquí preparo la clave privada y known_hosts para poder conectarme sin problemas.
         run: |
           mkdir -p ~/.ssh
           printf "%s" "${EC2_LLAVE_SSH}" > ~/.ssh/id_rsa
@@ -226,10 +221,11 @@ jobs:
           fi
 
       - name: Subir docker-compose.yml a EC2
+        # Subo el docker-compose al directorio ~/app de la máquina.
         run: scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "$EC2_USER@$EC2_HOST:~/app/docker-compose.yml"
 
       - name: Ejecutar despliegue en EC2
-        # Aquí hago el pull de la imagen y levanto los contenedores en la EC2.
+        # Aquí hago login en ECR, actualizo contenedores y limpio imágenes antiguas.
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -e
@@ -238,7 +234,7 @@ jobs:
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-            # ---- Pasar configuración de BD al docker-compose ----
+            # Paso las variables de base de datos al entorno
             export DB_ENGINE='${DB_ENGINE}'
             export DB_HOST='${DB_HOST}'
             export DB_PORT='${DB_PORT}'
@@ -246,11 +242,11 @@ jobs:
             export DB_USER='${DB_USER}'
             export DB_PASSWORD='${DB_PASSWORD}'
 
-            # Aquí reconstruyo el host del registry a partir de la URL de ECR.
+            # Construyo el host del registry
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
             REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
 
-            # Y aquí construyo IMAGE_URI, que es lo que usa mi docker-compose.yml.
+            # Imagen que usarán los servicios del docker-compose
             export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
 
             echo 'Haciendo login en ECR desde la EC2'

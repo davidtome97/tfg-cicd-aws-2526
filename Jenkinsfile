@@ -24,7 +24,7 @@ pipeline {
             }
         }
 
-        // Si quieres activar SonarCloud:
+        // Si quiero activar SonarCloud:
         // stage('SonarQube') {
         //     steps {
         //         withSonarQubeEnv('SonarCloud') {

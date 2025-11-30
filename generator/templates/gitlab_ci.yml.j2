@@ -1,50 +1,47 @@
-# ---------- PIPELINE SCOPE ----------
+# Aquí defino cuándo quiero que se ejecute mi pipeline en GitLab.
 workflow:
   rules:
-    # Ejecutar en MRs (si el usuario lo ha activado)
+    # Si en el generador activé que se ejecute en MRs, añado esta regla.
 {% if config.run_on_mr %}
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 {% endif %}
-    # Ejecutar cuando haya push a cualquier rama
+    # Siempre la ejecuto cuando hay un push a cualquier rama.
     - if: '$CI_COMMIT_BRANCH'
-    # Si nada aplica, no ejecuto nada
+    # Si no se cumple ninguna de las reglas anteriores, no lanzo nada.
     - when: never
 
-# ---------- STAGES ----------
+# Los stages que voy a usar a lo largo de toda la pipeline.
 stages:
   - build
   - test
   - sonar
   - deploy
 
-# ========== VARIABLES GLOBALES (AWS / ECR) ==========
+# Variables globales compartidas entre jobs.
 variables:
+  # Uso el SHA corto como tag de imagen para identificar cada build.
   IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
 {% if config.use_aws %}
-  # Para AWS usamos directamente las variables CI/CD ya creadas en GitLab:
-  # - AWS_ACCESS_KEY_ID
-  # - AWS_SECRET_ACCESS_KEY
-  # - AWS_REGION
-  # - AWS_ECR_URL        (URL completa del registry)
-  # - ECR_REPOSITORY     (nombre del repositorio)
-  # - EC2_HOST, EC2_USUARIO, EC2_LLAVE_SSH, EC2_KNOWN_HOSTS
+  # Si estoy usando AWS, todas estas variables deben estar ya definidas en GitLab CI/CD:
+  # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+  # AWS_ECR_URL, ECR_REPOSITORY, EC2_HOST, EC2_USUARIO...
 {% endif %}
-  # Variables genéricas de base de datos (se definen en Settings → CI/CD → Variables):
-  # - DB_ENGINE, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+  # Variables genéricas para bases de datos (las creo yo en GitLab CI/CD según cada caso).
 
-# ---------- DEFAULTS ----------
+# Valores por defecto para todos los jobs.
 default:
   retry: 1
   before_script:
+    # Esto lo imprimo siempre para tener más contexto en los logs.
     - echo "Estoy en la rama $CI_COMMIT_BRANCH con commit $CI_COMMIT_SHORT_SHA"
 
-# ---------- JOB SENTINELA ----------
+# Job sencillo para que quede claro que la pipeline arrancó bien.
 pipeline_ok:
   stage: build
   script:
     - echo "Pipeline iniciado correctamente"
 
-# ===================== JAVA / MAVEN =====================
+# ------------------------- JAVA / MAVEN -------------------------
 
 build_java:
   stage: build
@@ -56,6 +53,7 @@ build_java:
 test_java:
   stage: test
   image: maven:3.9.9-eclipse-temurin-17
+  # Quiero que este job se ejecute después del build.
   needs: ["build_java"]
   script:
     - echo "Ejecutando tests de Maven..."
@@ -73,15 +71,14 @@ sonar:
       -Dsonar.organization="$SONAR_ORGANIZATION" \
       -Dsonar.host.url="$SONAR_HOST_URL"
   variables:
-    # Uso las mismas variables que en GitHub, pero aquí vienen de
-    # Settings → CI/CD → Variables en GitLab:
+    # Aquí simplemente vuelvo a mapear las variables desde GitLab CI/CD.
     SONAR_HOST_URL: "$SONAR_HOST_URL"
     SONAR_PROJECT_KEY: "$SONAR_PROJECT_KEY"
     SONAR_ORGANIZATION: "$SONAR_ORGANIZATION"
     SONAR_TOKEN: "$SONAR_TOKEN"
 {% endif %}
 
-# ===================== FASE 3-4 — Build & Push a ECR + Deploy en EC2 =====================
+# -------------- Build Docker + Push a ECR + Deploy en EC2 --------------
 {% if config.use_aws %}
 build_and_push:
   stage: build
@@ -89,49 +86,50 @@ build_and_push:
   services:
     - docker:24-dind
   variables:
+    # Configuración típica necesaria cuando uso docker-in-docker.
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
     DOCKER_DRIVER: overlay2
   rules:
-    {# --- Modo de despliegue, igual que en GitHub pero versión GitLab --- #}
+    # Reglas de ejecución según el modo de despliegue que haya elegido.
 {% if config.deploy_mode == 'main' %}
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
 {% elif config.deploy_mode == 'tag' %}
     - if: '$CI_COMMIT_TAG'
 {% elif config.deploy_mode == 'manual' %}
-    # Lanzado a mano desde la UI de GitLab (Run pipeline)
+    # En este caso solo se lanza manualmente desde "Run Pipeline".
     - if: '$CI_PIPELINE_SOURCE == "web"'
 {% else %}
-    # Si no hay modo de deploy seleccionado, nunca ejecuto este job
+    # Si no he elegido ningún modo, no lo ejecuto nunca.
     - when: never
 {% endif %}
   script:
-    - echo "Instalo AWS CLI"
+    - echo "Instalo AWS CLI para poder interactuar con ECR"
     - apk add --no-cache bash curl jq python3 py3-pip unzip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - export PATH="/tmp/awscli/bin:$PATH"
     - aws --version
 
-    # Normalizo registry a partir de AWS_ECR_URL (variable de GitLab)
+    # Quito el protocolo de la URL del registry para que Docker lo acepte.
     - REGISTRY_NO_PROTO="${AWS_ECR_URL#https://}"
     - REGISTRY_HOST="${REGISTRY_NO_PROTO%/}"
 
-    # Creo repo si no existe
+    # Compruebo si el repositorio existe en ECR; si no, lo creo.
     - |
       echo "Verifico repositorio ECR..."
       if ! aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1; then
         aws ecr create-repository --repository-name "$ECR_REPOSITORY" --region "$AWS_REGION" || true
       fi
 
-    # Login en ECR
+    # Login en ECR para poder subir imágenes.
     - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY_HOST"
 
-    # Build + tag
+    # Construyo la imagen y le añado dos tags: el SHA y latest.
     - docker build -t "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" .
     - docker tag "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG" "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
 
-    # Push
+    # Subo ambas imágenes a ECR.
     - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:$IMAGE_TAG"
     - docker push "$REGISTRY_HOST/$ECR_REPOSITORY:latest"
 
@@ -139,6 +137,7 @@ deploy_ec2:
   stage: deploy
   image: alpine:3.20
   rules:
+    # Mismas reglas de ejecución que en el job anterior.
 {% if config.deploy_mode == 'main' %}
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
 {% elif config.deploy_mode == 'tag' %}
@@ -150,22 +149,25 @@ deploy_ec2:
 {% endif %}
 
   before_script:
+    # Instalo lo básico para SSH, AWS y despliegue.
     - apk add --no-cache bash curl jq openssh-client python3 py3-pip
     - python3 -m venv /tmp/awscli && . /tmp/awscli/bin/activate
     - pip install --no-cache-dir awscli
     - aws --version
 
-    # SSH key desde variable EC2_LLAVE_SSH
+    # Preparo la clave privada para hacer SSH a la EC2.
     - mkdir -p ~/.ssh
     - |
       if [ -f "$EC2_LLAVE_SSH" ]; then
+        # Si la clave es un archivo, la copio.
         cp "$EC2_LLAVE_SSH" ~/.ssh/id_rsa
       else
+        # Si es una variable con contenido, la escribo.
         printf "%s" "$EC2_LLAVE_SSH" > ~/.ssh/id_rsa
       fi
     - chmod 600 ~/.ssh/id_rsa
 
-    # known_hosts
+    # Preparo el known_hosts.
     - |
       if [ -n "$EC2_KNOWN_HOSTS" ]; then
         printf "%s\n" "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
@@ -176,21 +178,25 @@ deploy_ec2:
   script:
     - echo "Inicio despliegue en EC2"
 
+    # Aseguro que existe el directorio en la máquina para subir el compose.
     - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
 
+    # Subo el docker-compose.yml al servidor.
     - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/app/docker-compose.yml"
 
     - |
+      # Ahora ejecuto el despliegue completo dentro de la EC2.
       ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "
       set -e
 
+      # Exporto todas las variables necesarias dentro de la EC2.
       export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY_ID}'
       export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_ACCESS_KEY}'
       export AWS_REGION='${AWS_REGION}'
       export AWS_ECR_URL='${AWS_ECR_URL}'
       export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-      # ---- Configuración genérica de Base de Datos ----
+      # Configuración de base de datos para la app.
       export DB_ENGINE='${DB_ENGINE:-postgresql}'
       export DB_HOST='${DB_HOST:-postgres-db}'
       export DB_PORT='${DB_PORT:-5432}'
@@ -198,6 +204,7 @@ deploy_ec2:
       export DB_USER='${DB_USER:-tfg}'
       export DB_PASSWORD='${DB_PASSWORD:-tfg}'
 
+      # Normalizo la URL del registry.
       REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
       REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
       export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
@@ -206,6 +213,7 @@ deploy_ec2:
       aws ecr get-login-password --region \"${AWS_REGION}\" \
           | docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
 
+      # Actualizo contenedores y limpio imágenes antiguas.
       cd ~/app
       docker compose pull
       docker compose up -d --remove-orphans
@@ -213,5 +221,6 @@ deploy_ec2:
       "
 
   environment:
+    # Indico que este despliegue corresponde al entorno de producción.
     name: production
 {% endif %}

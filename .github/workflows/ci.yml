@@ -2,40 +2,45 @@ name: CI
 
 on:
   push:
+    # hago que la pipeline se ejecute siempre que haga push a main o develop.
     branches: [ "main", "develop" ]
   pull_request:
+    # También la ejecuto cuando abro un PR hacia estas ramas.
     branches: [ "main", "develop" ]
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write   # Esto lo dejo porque algunas acciones lo necesitan para autenticación.
 
 env:
-  JAVA_VERSION: '17'
+  JAVA_VERSION: '17'   # Versión de Java que usa todo el workflow.
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # Descargo el repo.
 
       - name: Make mvnw executable
+        # Aseguro que el Maven Wrapper tiene permisos de ejecución.
         run: chmod +x mvnw
 
       - uses: actions/setup-java@v4
+        # Configuro Java con Temurin 17 y habilito caché de Maven.
         with:
           distribution: 'temurin'
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
 
       - name: Build (Maven Wrapper)
+        # Compilo el proyecto, pero salto los tests en esta fase.
         run: ./mvnw -B -DskipTests -f app/pom.xml package
 
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: build
+    needs: build   # Solo ejecuto tests si el build salió bien.
     steps:
       - uses: actions/checkout@v4
 
@@ -49,9 +54,11 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
+        # Aquí sí ejecuto los tests completos.
         run: ./mvnw -B -f app/pom.xml -Dspring.profiles.active=test test
 
       - name: Publica reports (siempre)
+        # Subo los reports pase lo que pase, así los puedo revisar en caso de fallo.
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -61,11 +68,12 @@ jobs:
   sonar:
     name: SonarQube
     runs-on: ubuntu-latest
-    needs: test
+    needs: test   # Solo quiero ejecutar Sonar si los tests se han ejecutado.
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Necesario para que SonarQube vea el historial
+          # Necesito el historial para que Sonar reciba todos los commits.
+          fetch-depth: 0
 
       - name: Make mvnw executable
         run: chmod +x mvnw
@@ -76,12 +84,12 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: 'maven'
 
-      # Compila para generar app/target/classes
+      # Necesito compilar para que existan las clases en target/classes
       - name: Build classes for Sonar
         run: ./mvnw -B -DskipTests -f app/pom.xml package
 
-      # Análisis SonarCloud
       - name: SonarQube Scan (Maven)
+        # Ejecuto el análisis de SonarCloud usando los secrets configurados en GitHub.
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
