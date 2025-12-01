@@ -64,11 +64,12 @@ sonar:
   needs: ["test_java"]
   script:
     - echo "Lanzando análisis de SonarCloud..."
-    - ./mvnw -B -f pom.xml verify sonar:sonar \
+    - ./mvnw -B -f pom.xml \
       -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
       -Dsonar.organization="$SONAR_ORGANIZATION" \
       -Dsonar.host.url="$SONAR_HOST_URL" \
-      -Dsonar.login="$SONAR_TOKEN"
+      -Dsonar.login="$SONAR_TOKEN" \
+      verify sonar:sonar
 
 
 # -------------- Build Docker + Push a ECR + Deploy en EC2 --------------
