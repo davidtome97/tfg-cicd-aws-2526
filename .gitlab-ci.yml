@@ -67,9 +67,9 @@ sonar:
     - ./mvnw -B -f pom.xml verify sonar:sonar \
       -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
       -Dsonar.organization="$SONAR_ORGANIZATION" \
-      -Dsonar.host.url="$SONAR_HOST_URL"
+      -Dsonar.host.url="$SONAR_HOST_URL" \
+      -Dsonar.login="$SONAR_TOKEN"
   variables:
-    # Aquí simplemente vuelvo a mapear las variables desde GitLab CI/CD.
     SONAR_HOST_URL: "$SONAR_HOST_URL"
     SONAR_PROJECT_KEY: "$SONAR_PROJECT_KEY"
     SONAR_ORGANIZATION: "$SONAR_ORGANIZATION"
