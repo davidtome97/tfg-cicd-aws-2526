@@ -52,6 +52,15 @@ Documentación del TFG organizada por fases:
 
 ---
 
+## Estructura del repositorio
+
+- `webapp/`: futura aplicación web de gestión de despliegues (login, gestión de apps, asistente, etc.).
+- `templates-ci/`: motor de generación de pipelines CI/CD (GitHub Actions, GitLab CI y Jenkins).
+- `demo-java/`: aplicación demo Java para probar el flujo CI/CD y despliegue.
+- `demo-python/`: aplicación demo Python para probar el flujo CI/CD y despliegue.
+- `docs/`: documentación, diagramas y guías del TFG.
+- `app/`: aplicación original (SistemaGestionApp), que se reutilizará como demo Java.
+
 ## Tecnologías principales
 
 - Docker y docker-compose
