@@ -50,6 +50,16 @@ Documentación del TFG organizada por fases:
 - **03_Fase3_GitLabCI.md**
 - **img/** – Imágenes que se incluyen en la documentación.
 
+
+## Estructura del repositorio
+
+- `webapp/`: futura aplicación web de gestión de despliegues (login, gestión de apps, asistente, etc.).
+- `templates-ci/`: motor de generación de pipelines CI/CD (GitHub Actions, GitLab CI, Jenkins).
+- `demo-java/`: aplicación demo Java para probar CI/CD y despliegue.
+- `demo-python/`: aplicación demo Python para probar CI/CD y despliegue.
+- `docs/`: documentación, diagramas y guías del TFG.
+- `app/`: aplicación original del proyecto (se irá simplificando y reutilizando como demo Java).
+
 ---
 
 ## Tecnologías principales
