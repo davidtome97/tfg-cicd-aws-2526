@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="box">
+    <h1>Registro</h1>
+
+    <form action="{{ url_for('register') }}" method="POST">
+        <input
+                type="text"
+                name="name"
+                placeholder="Nombre"
+                required="required"
+        />
+        <input
+                type="email"
+                name="email"
+                placeholder="Correo electrónico"
+                required="required"
+        />
+        <input
+                type="password"
+                name="password"
+                placeholder="Contraseña"
+                required="required"
+        />
+        <button type="submit" class="btn btn-primary btn-block btn-large">
+            Crear cuenta
+        </button>
+    </form>
+
+    <p class="mt-3">
+        ¿Ya tienes cuenta?
+        <a href="{{ url_for('login') }}">Inicia sesión</a>
+    </p>
+</div>
+
+{% endblock %}
