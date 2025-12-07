@@ -7,7 +7,7 @@ import com.sistemagestionapp.model.TipoBaseDatos;
 import com.sistemagestionapp.model.Usuario;
 import com.sistemagestionapp.service.AplicacionService;
 import com.sistemagestionapp.service.UsuarioService;
-import com.sistemagestionapp.service.ZipGeneratorService;
+import com.sistemagestionapp.service.ProyectoZipService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -36,7 +36,7 @@ public class AplicacionController {
     private UsuarioService usuarioService;
 
     @Autowired
-    private ZipGeneratorService zipGeneratorService;
+    private ProyectoZipService proyectoZipService;
 
     /**
      * Muestro el listado de aplicaciones del usuario autenticado.
@@ -105,7 +105,21 @@ public class AplicacionController {
      */
     @GetMapping("/{id}/zip")
     public void descargarZip(@PathVariable Long id, HttpServletResponse response) throws IOException {
-        zipGeneratorService.generarZipAplicacion(id, response);
+        // 1) Busco la aplicación en BD
+        Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+
+        // 2) Genero el ZIP temporal con el proyecto Java + app-config.properties
+        java.nio.file.Path zipPath = proyectoZipService.generarProyectoJava(aplicacion);
+
+        // 3) Preparo la respuesta HTTP para que el navegador lo descargue
+        response.setContentType("application/zip");
+        response.setHeader(
+                "Content-Disposition",
+                "attachment; filename=\"" + zipPath.getFileName().toString() + "\""
+        );
+
+        java.nio.file.Files.copy(zipPath, response.getOutputStream());
+        response.flushBuffer();
     }
 
     /**
