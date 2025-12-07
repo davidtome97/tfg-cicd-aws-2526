@@ -1,8 +1,6 @@
-package com.sistemagestionapp.model;
+package com.sistemagestionapp.demojava.model;
 
 import jakarta.persistence.*;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "usuarios")
@@ -12,19 +10,17 @@ public class Usuario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
     private String nombre;
 
-    @Column(unique = true)
+    @Column(nullable = false, unique = true)
     private String correo;
 
+    @Column(nullable = false)
     private String password;
 
-    // --- RELACIÓN NUEVA: Usuario 1 - N Aplicaciones ---
-    @OneToMany(mappedBy = "propietario", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Aplicacion> aplicaciones = new ArrayList<>();
-
-    // Constructores
-    public Usuario() {}
+    public Usuario() {
+    }
 
     public Usuario(String nombre, String correo, String password) {
         this.nombre = nombre;
@@ -32,13 +28,8 @@ public class Usuario {
         this.password = password;
     }
 
-    // Getters y setters
     public Long getId() {
         return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
     }
 
     public String getNombre() {
@@ -63,14 +54,5 @@ public class Usuario {
 
     public void setPassword(String password) {
         this.password = password;
-    }
-
-    // --- GETTERS/SETTERS de la relación nueva ---
-    public List<Aplicacion> getAplicaciones() {
-        return aplicaciones;
-    }
-
-    public void setAplicaciones(List<Aplicacion> aplicaciones) {
-        this.aplicaciones = aplicaciones;
     }
 }
