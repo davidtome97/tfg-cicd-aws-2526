@@ -10,51 +10,73 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Esta clase la utilizo como controlador principal para gestionar todas las operaciones
- * relacionadas con los usuarios del sistema.
- * Me encargo de mostrar el formulario de login, listar usuarios, crear nuevos,
- * editar existentes y eliminarlos. Trabajo en conjunto con el servicio
- * {@link UsuarioService} para acceder a la lógica de negocio.
- *
- * @author David Tomé Arnáiz
+ * Controlador principal para gestionar las operaciones relacionadas con los usuarios del sistema.
+ * Me encargo de:
+ * - Mostrar el formulario de login.
+ * - Listar usuarios.
+ * - Crear nuevos usuarios.
+ * - Editar y eliminar usuarios.
+ * - Gestionar el registro de nuevos usuarios.
  */
 @Controller
 public class UsuarioController {
 
-    /**
-     * Inyecto el servicio de usuarios que me permite acceder, guardar, actualizar
-     * y eliminar usuarios del sistema.
-     */
     @Autowired
     private UsuarioService usuarioService;
 
-    /**
-     * Muestro el formulario de login con mensajes personalizados en caso de error o cierre de sesión.
-     *
-     * @param error  indica si hubo un fallo de autenticación.
-     * @param logout indica si el usuario cerró sesión correctamente.
-     * @param model  modelo para pasar datos a la vista.
-     * @return el nombre de la plantilla del formulario de login.
-     */
+    // ---------------- LOGIN ----------------
+
     @GetMapping("/login")
-    public String mostrarFormularioLogin(@RequestParam(value = "error", required = false) String error,
-                                         @RequestParam(value = "logout", required = false) String logout,
-                                         Model model) {
+    public String mostrarFormularioLogin(
+            @RequestParam(value = "error", required = false) String error,
+            @RequestParam(value = "logout", required = false) String logout,
+            @RequestParam(value = "registro_ok", required = false) String registro_ok,
+            Model model) {
+
         if (error != null) {
             model.addAttribute("error", "Correo o contraseña incorrectos.");
         }
         if (logout != null) {
             model.addAttribute("mensaje", "Has cerrado sesión correctamente.");
         }
+        if (registro_ok != null) {
+            model.addAttribute("mensaje", "Registro realizado correctamente. Ya puedes iniciar sesión.");
+        }
+
         return "login";
     }
 
-    /**
-     * Muestro la lista completa de usuarios en la vista "usuarios.html".
-     *
-     * @param model modelo para pasar la lista de usuarios a la vista.
-     * @return el nombre de la plantilla que muestra los usuarios.
-     */
+    // ---------------- REGISTRO ----------------
+
+    @GetMapping("/registro")
+    public String mostrarFormularioRegistro(Model model) {
+        model.addAttribute("usuario", new Usuario());
+        return "registro";
+    }
+
+    @PostMapping("/registro")
+    public String registrarUsuario(@ModelAttribute("usuario") Usuario usuario,
+                                   @RequestParam("passwordRepetida") String passwordRepetida,
+                                   Model model) {
+
+        if (!usuario.getPassword().equals(passwordRepetida)) {
+            model.addAttribute("error", "Las contraseñas no coinciden.");
+            return "registro";
+        }
+
+        if (usuarioService.existePorCorreo(usuario.getCorreo())) {
+            model.addAttribute("error", "Ya existe un usuario con ese correo.");
+            return "registro";
+        }
+
+        // IMPORTANTE: aquí NO encripto, lo hará UsuarioService.guardarUsuario()
+        usuarioService.guardarUsuario(usuario);
+
+        return "redirect:/login?registro_ok";
+    }
+
+    // ---------------- GESTIÓN USUARIOS ----------------
+
     @GetMapping("/usuarios")
     public String verUsuarios(Model model) {
         List<Usuario> usuarios = usuarioService.listarUsuarios();
@@ -62,14 +84,6 @@ public class UsuarioController {
         return "usuarios";
     }
 
-    /**
-     * Creo un nuevo usuario a partir de los datos recibidos desde el formulario.
-     * Si ya existe un usuario con el mismo correo, muestro un mensaje de error.
-     *
-     * @param usuario objeto con los datos del nuevo usuario.
-     * @param model   modelo para pasar información a la vista en caso de error.
-     * @return redirijo a la lista de usuarios o recargo el formulario con errores.
-     */
     @PostMapping("/usuarios")
     public String crearUsuario(@ModelAttribute Usuario usuario, Model model) {
         if (usuarioService.existePorCorreo(usuario.getCorreo())) {
@@ -78,17 +92,11 @@ public class UsuarioController {
             return "usuarios";
         }
 
+        // Contraseña en texto plano → el servicio la encripta
         usuarioService.guardarUsuario(usuario);
         return "redirect:/usuarios";
     }
 
-    /**
-     * Muestro el formulario de edición de un usuario a partir de su ID.
-     *
-     * @param id    identificador del usuario a editar.
-     * @param model modelo para pasar los datos del usuario a la vista.
-     * @return el nombre de la plantilla de edición.
-     */
     @GetMapping("/usuarios/editar/{id}")
     public String mostrarFormularioEditar(@PathVariable Long id, Model model) {
         Usuario usuario = usuarioService.obtenerUsuarioPorId(id);
@@ -96,20 +104,15 @@ public class UsuarioController {
         return "editar";
     }
 
-    /**
-     * Actualizo los datos de un usuario existente. Si la nueva contraseña está vacía,
-     * conservo la anterior.
-     *
-     * @param usuario  objeto con los datos actualizados del usuario.
-     * @param password nueva contraseña (opcional).
-     * @return redirijo a la lista de usuarios.
-     */
     @PostMapping("/usuarios/actualizar")
     public String actualizarUsuario(@ModelAttribute Usuario usuario,
                                     @RequestParam(required = false) String password) {
+
         if (password != null && !password.isBlank()) {
+            // Nueva contraseña en texto plano → el servicio la encripta
             usuario.setPassword(password);
         } else {
+            // Mantengo la contraseña anterior tal cual está en BD
             String anterior = usuarioService.obtenerUsuarioPorId(usuario.getId()).getPassword();
             usuario.setPassword(anterior);
         }
@@ -118,12 +121,6 @@ public class UsuarioController {
         return "redirect:/usuarios";
     }
 
-    /**
-     * Elimino un usuario del sistema utilizando su ID.
-     *
-     * @param id identificador del usuario a eliminar.
-     * @return redirijo a la lista de usuarios.
-     */
     @GetMapping("/usuarios/eliminar/{id}")
     public String eliminarUsuario(@PathVariable Long id) {
         usuarioService.eliminarUsuario(id);
