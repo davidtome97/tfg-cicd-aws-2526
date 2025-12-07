@@ -34,7 +34,11 @@ public class Aplicacion {
     private String sonarProjectKey;
     private String nombreImagenEcr;
 
-    private LocalDateTime fechaCreacion = LocalDateTime.now();
+    /**
+     * Fecha en la que se crea la aplicación.
+     * La inicializo automáticamente en @PrePersist si viene a null.
+     */
+    private LocalDateTime fechaCreacion;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
@@ -45,7 +49,17 @@ public class Aplicacion {
 
     public Aplicacion() {}
 
-    // Getters y setters (por ahora solo estructura, sin lógica)
+    // ===================== Ciclo de vida JPA ===================== //
+
+    @PrePersist
+    public void prePersist() {
+        if (this.fechaCreacion == null) {
+            this.fechaCreacion = LocalDateTime.now();
+        }
+    }
+
+    // ===================== Getters y setters ===================== //
+
     public Long getId() { return id; }
 
     public String getNombre() { return nombre; }
@@ -85,6 +99,7 @@ public class Aplicacion {
     public void setNombreImagenEcr(String nombreImagenEcr) { this.nombreImagenEcr = nombreImagenEcr; }
 
     public LocalDateTime getFechaCreacion() { return fechaCreacion; }
+    public void setFechaCreacion(LocalDateTime fechaCreacion) { this.fechaCreacion = fechaCreacion; }
 
     public Usuario getPropietario() { return propietario; }
     public void setPropietario(Usuario propietario) { this.propietario = propietario; }

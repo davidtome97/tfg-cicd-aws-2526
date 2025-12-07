@@ -1,20 +1,22 @@
 package com.sistemagestionapp.service;
 
 import com.sistemagestionapp.model.Aplicacion;
-import com.sistemagestionapp.model.ControlDespliegue;
-import com.sistemagestionapp.model.EstadoControl;
-import com.sistemagestionapp.model.PasoDespliegue;
 import com.sistemagestionapp.model.Usuario;
 import com.sistemagestionapp.repository.AplicacionRepository;
-import com.sistemagestionapp.repository.ControlDespliegueRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 /**
- * Servicio para gestionar las aplicaciones de cada usuario y
- * calcular el estado de los pasos de despliegue.
+ * Servicio que utilizo para gestionar la lógica de negocio relacionada
+ * con las aplicaciones del usuario.
+ *
+ * Me permite:
+ * - Listar las aplicaciones de un usuario.
+ * - Guardar/actualizar una aplicación.
+ * - Buscar por id.
+ * - Eliminar una aplicación.
  */
 @Service
 public class AplicacionService {
@@ -22,35 +24,31 @@ public class AplicacionService {
     @Autowired
     private AplicacionRepository aplicacionRepository;
 
-    @Autowired
-    private ControlDespliegueRepository controlDespliegueRepository;
-
     /**
-     * Devuelvo todas las aplicaciones pertenecientes a un usuario.
+     * Devuelvo todas las aplicaciones de un propietario concreto.
      */
-    public List<Aplicacion> listarPorUsuario(Usuario propietario) {
+    public List<Aplicacion> listarPorPropietario(Usuario propietario) {
         return aplicacionRepository.findByPropietario(propietario);
     }
 
     /**
-     * Número de pasos de despliegue definidos en el sistema.
-     * (ahora mismo SONAR_ANALISIS, SONAR_INTEGRACION_GIT, REPOSITORIO_GIT,
-     *  IMAGEN_ECR, DESPLIEGUE_EC2, RESUMEN_FINAL -> 6 pasos).
+     * Guardo una nueva aplicación o actualizo una existente.
      */
-    public int getTotalPasos() {
-        return PasoDespliegue.values().length;
+    public Aplicacion guardar(Aplicacion aplicacion) {
+        return aplicacionRepository.save(aplicacion);
     }
 
     /**
-     * Cuenta cuántos pasos de despliegue están en estado OK
-     * para una aplicación concreta.
+     * Busco una aplicación por su id.
      */
-    public int contarPasosOk(Aplicacion aplicacion) {
-        List<ControlDespliegue> controles =
-                controlDespliegueRepository.findByAplicacion(aplicacion);
+    public Aplicacion obtenerPorId(Long id) {
+        return aplicacionRepository.findById(id).orElse(null);
+    }
 
-        return (int) controles.stream()
-                .filter(c -> c.getEstado() == EstadoControl.OK)
-                .count();
+    /**
+     * Elimino una aplicación por su id.
+     */
+    public void eliminar(Long id) {
+        aplicacionRepository.deleteById(id);
     }
 }

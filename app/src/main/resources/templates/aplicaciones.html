@@ -6,54 +6,56 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 </head>
-<body class="container mt-4">
+<body class="container mt-5">
 
 <h2 class="mb-4">Listado de aplicaciones</h2>
 
-<!-- Botón para crear nueva aplicación (lo implementaremos en etapas posteriores) -->
 <div class="mb-3">
-    <a href="#" class="btn btn-success">
-        Nueva aplicación
-    </a>
+    <a th:href="@{/aplicaciones/nueva}" class="btn btn-success">Nueva aplicación</a>
 </div>
 
-<table class="table table-striped table-bordered align-middle">
-    <thead class="table-light">
+<table class="table table-bordered table-striped">
+    <thead>
     <tr>
         <th>Nombre</th>
         <th>Lenguaje</th>
         <th>Base de datos</th>
         <th>Proveedor CI/CD</th>
+        <th>Fecha creación</th>
         <th>Pasos despliegue</th>
         <th>Estado</th>
         <th>Acciones</th>
     </tr>
     </thead>
+
     <tbody>
+    <tr th:if="${#lists.isEmpty(aplicaciones)}">
+        <td colspan="8" class="text-center">
+            Todavía no tienes aplicaciones configuradas.
+        </td>
+    </tr>
+
     <tr th:each="app : ${aplicaciones}">
-        <td th:text="${app.nombre}">Nombre app</td>
-        <td th:text="${app.lenguaje}">JAVA</td>
-        <td th:text="${app.tipoBaseDatos}">POSTGRESQL</td>
-        <td th:text="${app.proveedorCiCd}">GITHUB</td>
-
-        <!-- Pasos OK / total -->
-        <td>
-            <span th:text="${pasosOkPorAplicacion[app.id]} + ' / ' + ${totalPasos}">0 / 6</span>
+        <td th:text="${app.nombre}">Nombre</td>
+        <td th:text="${app.lenguaje}">Lenguaje</td>
+        <td th:text="${app.tipoBaseDatos}">BD</td>
+        <td th:text="${app.proveedorCiCd}">Proveedor</td>
+        <td th:text="${#temporals.format(app.fechaCreacion, 'dd/MM/yyyy HH:mm')}">
+            Fecha
         </td>
 
-        <!-- Estado visual muy sencillo: si todos los pasos están OK, verde; si no, amarillo -->
-        <td>
-            <span th:if="${pasosOkPorAplicacion[app.id]} == ${totalPasos}"
-                  class="badge bg-success">OK</span>
-            <span th:if="${pasosOkPorAplicacion[app.id]} != ${totalPasos}"
-                  class="badge bg-warning text-dark">Pendiente</span>
-        </td>
+        <td>0 / 6</td>
+        <td>--</td>
 
-        <!-- Acciones (enlace sin implementar todavía) -->
         <td>
-            <a href="#" class="btn btn-sm btn-primary me-1">Ver / Editar</a>
-            <a href="#" class="btn btn-sm btn-secondary me-1">Generar ZIP</a>
-            <a href="#" class="btn btn-sm btn-outline-primary">Asistente despliegue</a>
+            <a th:href="@{'/aplicaciones/editar/' + ${app.id}}"
+               class="btn btn-sm btn-warning">Editar</a>
+
+            <a th:href="@{'/aplicaciones/eliminar/' + ${app.id}}"
+               class="btn btn-sm btn-danger"
+               onclick="return confirm('¿Seguro que quieres eliminar esta aplicación?');">
+                Eliminar
+            </a>
         </td>
     </tr>
     </tbody>
