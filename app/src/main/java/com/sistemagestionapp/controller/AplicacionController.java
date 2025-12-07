@@ -7,13 +7,15 @@ import com.sistemagestionapp.model.TipoBaseDatos;
 import com.sistemagestionapp.model.Usuario;
 import com.sistemagestionapp.service.AplicacionService;
 import com.sistemagestionapp.service.UsuarioService;
+import com.sistemagestionapp.service.ProyectoZipService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.security.Principal;
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -21,6 +23,7 @@ import java.util.List;
  * - Listado de aplicaciones.
  * - Formulario de creación y edición.
  * - Eliminación.
+ * - Descarga de proyecto demo (ZIP).
  */
 @Controller
 @RequestMapping("/aplicaciones")
@@ -31,6 +34,9 @@ public class AplicacionController {
 
     @Autowired
     private UsuarioService usuarioService;
+
+    @Autowired
+    private ProyectoZipService proyectoZipService;
 
     /**
      * Muestro el listado de aplicaciones del usuario autenticado.
@@ -88,15 +94,32 @@ public class AplicacionController {
         Usuario propietario = usuarioService.obtenerPorCorreo(correo);
         aplicacion.setPropietario(propietario);
 
-        // Si es una nueva aplicación, inicializo la fecha de creación
-        if (aplicacion.getId() == null) {
-            aplicacion.setFechaCreacion(LocalDateTime.now());
-        }
-
         aplicacionService.guardar(aplicacion);
 
         // De momento ambos botones (Guardar / Guardar y generar ZIP) hacen lo mismo
         return "redirect:/aplicaciones";
+    }
+
+    /**
+     * Descargo el ZIP con el proyecto demo para esta aplicación.
+     */
+    @GetMapping("/{id}/zip")
+    public void descargarZip(@PathVariable Long id, HttpServletResponse response) throws IOException {
+        // 1) Busco la aplicación en BD
+        Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+
+        // 2) Genero el ZIP temporal con el proyecto Java + app-config.properties
+        java.nio.file.Path zipPath = proyectoZipService.generarProyectoJava(aplicacion);
+
+        // 3) Preparo la respuesta HTTP para que el navegador lo descargue
+        response.setContentType("application/zip");
+        response.setHeader(
+                "Content-Disposition",
+                "attachment; filename=\"" + zipPath.getFileName().toString() + "\""
+        );
+
+        java.nio.file.Files.copy(zipPath, response.getOutputStream());
+        response.flushBuffer();
     }
 
     /**

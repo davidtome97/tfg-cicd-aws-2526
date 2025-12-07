@@ -27,34 +27,32 @@
         <th>Acciones</th>
     </tr>
     </thead>
-
     <tbody>
     <tr th:if="${#lists.isEmpty(aplicaciones)}">
         <td colspan="8" class="text-center">
             Todavía no tienes aplicaciones configuradas.
         </td>
     </tr>
-
     <tr th:each="app : ${aplicaciones}">
         <td th:text="${app.nombre}">Nombre</td>
         <td th:text="${app.lenguaje}">Lenguaje</td>
         <td th:text="${app.tipoBaseDatos}">BD</td>
         <td th:text="${app.proveedorCiCd}">Proveedor</td>
-        <td th:text="${#temporals.format(app.fechaCreacion, 'dd/MM/yyyy HH:mm')}">
-            Fecha
-        </td>
-
+        <td th:text="${#temporals.format(app.fechaCreacion, 'dd/MM/yyyy HH:mm')}">01/01/2025 12:00</td>
+        <!-- De momento dejamos pasos y estado como texto fijo -->
         <td>0 / 6</td>
         <td>--</td>
-
         <td>
             <a th:href="@{'/aplicaciones/editar/' + ${app.id}}"
-               class="btn btn-sm btn-warning">Editar</a>
-
+               class="btn btn-sm btn-warning mb-1">Editar</a>
             <a th:href="@{'/aplicaciones/eliminar/' + ${app.id}}"
-               class="btn btn-sm btn-danger"
+               class="btn btn-sm btn-danger mb-1"
                onclick="return confirm('¿Seguro que quieres eliminar esta aplicación?');">
                 Eliminar
+            </a>
+            <a th:href="@{'/aplicaciones/' + ${app.id} + '/zip'}"
+               class="btn btn-sm btn-info mb-1">
+                Descargar ZIP
             </a>
         </td>
     </tr>
