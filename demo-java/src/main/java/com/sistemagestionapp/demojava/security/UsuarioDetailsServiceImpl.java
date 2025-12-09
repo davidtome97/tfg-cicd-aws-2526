@@ -1,6 +1,7 @@
 package com.sistemagestionapp.demojava.security;
 
 import com.sistemagestionapp.demojava.model.Usuario;
+import com.sistemagestionapp.demojava.model.mongo.UsuarioMongo;
 import com.sistemagestionapp.demojava.service.UsuarioService;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,13 +20,29 @@ public class UsuarioDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String correo) throws UsernameNotFoundException {
-        Usuario usuario = usuarioService.buscarPorCorreo(correo);
-        if (usuario == null) {
+
+        Object usuarioObj = usuarioService.buscarPorCorreo(correo);
+
+        if (usuarioObj == null) {
             throw new UsernameNotFoundException("Usuario no encontrado: " + correo);
         }
 
-        return User.withUsername(usuario.getCorreo())
-                .password(usuario.getPassword())
+        String username;
+        String password;
+
+        // Java 17: pattern matching con instanceof
+        if (usuarioObj instanceof Usuario usuarioSql) {
+            username = usuarioSql.getCorreo();
+            password = usuarioSql.getPassword();
+        } else if (usuarioObj instanceof UsuarioMongo usuarioMongo) {
+            username = usuarioMongo.getCorreo();
+            password = usuarioMongo.getPassword();
+        } else {
+            throw new IllegalStateException("Tipo de usuario desconocido: " + usuarioObj.getClass());
+        }
+
+        return User.withUsername(username)
+                .password(password)
                 .roles("USER")
                 .build();
     }

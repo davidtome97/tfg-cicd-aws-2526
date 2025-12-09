@@ -1,43 +1,50 @@
 package com.sistemagestionapp.demojava.config;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.data.mongodb.config.AbstractMongoClientConfiguration;
-import org.springframework.beans.factory.annotation.Value;
-
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.mongodb.config.AbstractMongoClientConfiguration;
 
 @Configuration
-@ConditionalOnProperty(name = "app.db.engine", havingValue = "mongo")
 public class MongoConfig extends AbstractMongoClientConfiguration {
 
-    @Value("${app.db.host}")
-    private String host;
+    @Value("${spring.data.mongodb.host}")
+    private String mongoHost;
 
-    @Value("${app.db.port}")
-    private String port;
+    @Value("${spring.data.mongodb.port}")
+    private int mongoPort;
 
-    @Value("${app.db.name}")
-    private String dbName;
+    @Value("${spring.data.mongodb.database}")
+    private String mongoDatabase;
 
-    @Value("${app.db.user}")
-    private String user;
+    @Value("${spring.data.mongodb.username}")
+    private String mongoUsername;
 
-    @Value("${app.db.password}")
-    private String password;
+    @Value("${spring.data.mongodb.password}")
+    private String mongoPassword;
+
+    @Value("${spring.data.mongodb.authentication-database}")
+    private String authDatabase;
 
     @Override
     protected String getDatabaseName() {
-        return dbName;
+        return mongoDatabase;
     }
 
+    @Bean
     @Override
     public MongoClient mongoClient() {
-
+        // URI apuntando SIEMPRE al servicio Docker "mongo", con usuario/contraseña
         String uri = String.format(
-                "mongodb://%s:%s@%s:%s/%s",
-                user, password, host, port, dbName
+                "mongodb://%s:%s@%s:%d/%s?authSource=%s",
+                mongoUsername,
+                mongoPassword,
+                mongoHost,
+                mongoPort,
+                mongoDatabase,
+                authDatabase
         );
 
         return MongoClients.create(uri);

@@ -2,7 +2,9 @@ version: "3.9"
 
 services:
 
+  # --------------------------
   #  MySQL (para Java y Python)
+  # --------------------------
   mysql:
     image: mysql:8
     container_name: tfg-mysql
@@ -22,7 +24,27 @@ services:
       retries: 10
       start_period: 10s
 
-  # MongoDB local (lo dejamos por si algún día lo usas)
+  postgres:
+    image: postgres:15
+    container_name: tfg-postgres
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    ports:
+      - "5432:5432"
+    networks:
+      - tfg-net
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U demo" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------
+  #  MongoDB local
+  # --------------------------
   mongo:
     image: mongo:8
     container_name: tfg-mongo
@@ -34,43 +56,49 @@ services:
     networks:
       - tfg-net
 
-  # Demo Java (Spring Boot) -> MySQL
+  # --------------------------
+  #  Demo Java (Spring Boot)
+  #     pero MySQL sigue arrancando para las tablas SQL
+  # --------------------------
   demo-java:
     build: ./demo-java
     container_name: demo-java-app
     environment:
-      DB_ENGINE: mysql
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: demo
-      DB_USER: demo
-      DB_PASSWORD: demo
+      DB_ENGINE: ${JAVA_DB_ENGINE}
+      DB_HOST: ${JAVA_DB_HOST}
+      DB_PORT: ${JAVA_DB_PORT}
+      DB_NAME: ${JAVA_DB_NAME}
+      DB_USER: ${JAVA_DB_USER}
+      DB_PASSWORD: ${JAVA_DB_PASSWORD}
     ports:
       - "8081:8081"
     depends_on:
       mysql:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_started
     networks:
       - tfg-net
 
-  # Demo Python (Flask) -> MySQL para la web, pero con acceso a Mongo Atlas para el script
   demo-python:
     build: ./demo-python
     container_name: demo-python-app
     environment:
-      DB_ENGINE: mysql           # 🔴 IMPORTANTE: mysql, no mongo
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: demo
-      DB_USER: demo
-      DB_PASSWORD: demo
-
-      # URI de Mongo Atlas (cargando desde tu .env local o desde el entorno)
+      DB_ENGINE: ${PY_DB_ENGINE}
+      DB_HOST: ${PY_DB_HOST}
+      DB_PORT: ${PY_DB_PORT}
+      DB_NAME: ${PY_DB_NAME}
+      DB_USER: ${PY_DB_USER}
+      DB_PASSWORD: ${PY_DB_PASSWORD}
       MONGO_URI: ${MONGO_URI}
     ports:
       - "5001:5000"
     depends_on:
       mysql:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - tfg-net
