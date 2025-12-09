@@ -18,17 +18,22 @@ public class DataInitializer {
     public CommandLineRunner initUsers(UsuarioRepository usuarioRepository,
                                        PasswordEncoder passwordEncoder) {
         return args -> {
+
+            // Datos por defecto para el admin
             String correoAdmin = "admin@admin.com";
+
+            // Solo crear si no existe
             if (!usuarioRepository.existsByCorreo(correoAdmin)) {
                 Usuario admin = new Usuario(
-                        "Admin",
-                        correoAdmin,
-                        passwordEncoder.encode("admin")
+                        "Admin",                     // nombre
+                        correoAdmin,                 // correo
+                        passwordEncoder.encode("admin") // password
                 );
+
                 usuarioRepository.save(admin);
                 log.info("✅ Usuario admin creado por defecto (admin@admin.com / admin)");
             } else {
-                log.info("ℹ️ Usuario admin ya existe");
+                log.info("ℹ️ Usuario admin ya existe, no se crea uno nuevo");
             }
         };
     }
