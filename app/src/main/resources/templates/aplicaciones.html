@@ -43,17 +43,23 @@
         <td>0 / 6</td>
         <td>--</td>
         <td>
-            <a th:href="@{'/aplicaciones/editar/' + ${app.id}}"
-               class="btn btn-sm btn-warning mb-1">Editar</a>
-            <a th:href="@{'/aplicaciones/eliminar/' + ${app.id}}"
-               class="btn btn-sm btn-danger mb-1"
-               onclick="return confirm('¿Seguro que quieres eliminar esta aplicación?');">
-                Eliminar
-            </a>
-            <a th:href="@{'/aplicaciones/' + ${app.id} + '/zip'}"
-               class="btn btn-sm btn-info mb-1">
-                Descargar ZIP
-            </a>
+            <div class="d-flex gap-2">
+
+                <a th:href="@{/apps/{id}/edit(id=${app.id})}"
+                   class="btn btn-warning btn-sm">Editar</a>
+
+                <form th:action="@{/apps/{id}/delete(id=${app.id})}"
+                      method="post">
+                    <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                </form>
+
+                <a th:href="@{/apps/{id}/zip(id=${app.id})}"
+                   class="btn btn-info btn-sm text-white">Descargar ZIP</a>
+
+                <a th:href="@{/wizard/paso1}"
+                   class="btn btn-primary btn-sm">Asistente</a>
+
+            </div>
         </td>
     </tr>
     </tbody>

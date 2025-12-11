@@ -37,8 +37,8 @@ public class WebSecurityConfig {
                         .usernameParameter("correo")
                         .passwordParameter("password")
 
-                        //  al asistente, no a /usuarios
-                        .defaultSuccessUrl("/wizard/paso1", true)
+                        //  al listado de aplicaciones, no a /usuarios
+                        .defaultSuccessUrl("/aplicaciones", true)
 
                         .failureUrl("/login?error")
                         .permitAll()
