@@ -15,6 +15,9 @@ app/.mvn/wrapper/maven-wrapper.jar
 app/env/
 .env
 
+demo-python/venv/
+venv/
+
 # Sonar y builds temporales
 .scannerwork/
 target/

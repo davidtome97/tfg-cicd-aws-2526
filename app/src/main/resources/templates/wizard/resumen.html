@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Resumen del asistente CI/CD</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+
+<body class="bg-light">
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">Sistema CI/CD – Resumen</a>
+    </div>
+</nav>
+
+<div class="container">
+
+    <h2 class="mb-3">Resumen de comprobaciones</h2>
+
+    <p class="text-muted">
+        Este resumen recoge los resultados obtenidos en cada paso del asistente.
+        Si algún paso aparece en rojo (<span class="badge bg-danger">KO</span>),
+        puedes volver atrás para revisarlo.
+    </p>
+
+    <!-- Botón para exportar el informe -->
+    <div class="mb-3">
+        <button class="btn btn-secondary" onclick="exportarPdf()">
+            📄 Exportar resumen en PDF
+        </button>
+    </div>
+
+    <!-- Caja con resultados -->
+    <div class="card p-4 shadow-sm mb-4">
+        <h4 class="mb-3">Resultados</h4>
+
+        <ul class="list-group">
+
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Paso 1 – SonarCloud:</strong>
+                    <span id="p1_estado" class="badge bg-secondary">N/A</span>
+                </div>
+                <small id="p1_mensaje" class="text-muted"></small>
+            </li>
+
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Paso 2 – Integración Sonar ↔ Git:</strong>
+                    <span id="p2_estado" class="badge bg-secondary">N/A</span>
+                </div>
+                <small id="p2_mensaje" class="text-muted"></small>
+            </li>
+
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Paso 3 – Repositorio Git:</strong>
+                    <span id="p3_estado" class="badge bg-secondary">N/A</span>
+                </div>
+                <small id="p3_mensaje" class="text-muted"></small>
+            </li>
+
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Paso 4 – Imagen Docker en ECR:</strong>
+                    <span id="p4_estado" class="badge bg-secondary">N/A</span>
+                </div>
+                <small id="p4_mensaje" class="text-muted"></small>
+            </li>
+
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Paso 5 – Despliegue en EC2:</strong>
+                    <span id="p5_estado" class="badge bg-secondary">N/A</span>
+                </div>
+                <small id="p5_mensaje" class="text-muted"></small>
+            </li>
+
+        </ul>
+    </div>
+
+    <!-- INTERPRETACIÓN DINÁMICA -->
+    <div class="card p-4 shadow-sm">
+        <h4 class="mb-3">Interpretación del resultado</h4>
+        <ul>
+            <li><span id="interp12">Pasos 1 y 2 → pendiente...</span></li>
+            <li><span id="interp3">Paso 3 → pendiente...</span></li>
+            <li><span id="interp4">Paso 4 → pendiente...</span></li>
+            <li><span id="interp5">Paso 5 → pendiente...</span></li>
+        </ul>
+
+        <p class="text-muted mb-0">
+            Si algún paso está en KO, vuelve atrás y corrige los parámetros o configuración afectados.
+        </p>
+    </div>
+
+    <div class="mt-3 d-flex justify-content-between">
+        <a href="/wizard/paso5" class="btn btn-link">&larr; Volver al paso 5</a>
+        <a href="/" class="btn btn-primary">Volver al inicio</a>
+    </div>
+
+</div>
+
+<!-- jsPDF desde CDN -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<script>
+    // ----- Leer datos -----
+    function leerResultadoPaso(key) {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return { estado: "N/A", mensaje: "Este paso no se ha ejecutado todavía en esta sesión." };
+
+        try {
+            const obj = JSON.parse(raw);
+            return {
+                estado: obj.estado || "N/A",
+                mensaje: obj.mensaje || ""
+            };
+        } catch {
+            return { estado: "N/A", mensaje: "Error leyendo datos." };
+        }
+    }
+
+    // ----- Pintar en pantalla -----
+    function pintarResumen() {
+        const pasos = [
+            { key: "wizard_paso1", idEstado: "p1_estado", idMensaje: "p1_mensaje" },
+            { key: "wizard_paso2", idEstado: "p2_estado", idMensaje: "p2_mensaje" },
+            { key: "wizard_paso3", idEstado: "p3_estado", idMensaje: "p3_mensaje" },
+            { key: "wizard_paso4", idEstado: "p4_estado", idMensaje: "p4_mensaje" },
+            { key: "wizard_paso5", idEstado: "p5_estado", idMensaje: "p5_mensaje" }
+        ];
+
+        const estados = {};
+
+        pasos.forEach((p, index) => {
+            const res = leerResultadoPaso(p.key);
+
+            const spanEstado = document.getElementById(p.idEstado);
+            const pMensaje = document.getElementById(p.idMensaje);
+
+            spanEstado.innerText = res.estado;
+            pMensaje.innerText = res.mensaje;
+
+            if (res.estado === "OK") spanEstado.className = "badge bg-success";
+            else if (res.estado === "KO") spanEstado.className = "badge bg-danger";
+            else spanEstado.className = "badge bg-secondary";
+
+            estados[index + 1] = res.estado; // pasos 1–5
+        });
+
+        // Interpretación dinámica:
+        const i12 = document.getElementById("interp12");
+        const i3  = document.getElementById("interp3");
+        const i4  = document.getElementById("interp4");
+        const i5  = document.getElementById("interp5");
+
+        // Paso 1 + 2
+        if (estados[1] === "OK" && estados[2] === "OK")
+            i12.textContent = "Pasos 1 y 2 OK → Integración Git ↔ SonarCloud correcta.";
+        else if (estados[1] === "KO" || estados[2] === "KO")
+            i12.textContent = "Pasos 1 y/o 2 KO → Token o ProjectKey incorrectos, o Sonar no recibe análisis.";
+        else
+            i12.textContent = "Pasos 1 y 2 aún no se han ejecutado.";
+
+        // Paso 3
+        if (estados[3] === "OK")
+            i3.textContent = "Paso 3 OK → Repositorio Git accesible.";
+        else if (estados[3] === "KO")
+            i3.textContent = "Paso 3 KO → El repositorio Git no existe o no tiene commits.";
+        else
+            i3.textContent = "Paso 3 aún no se ha ejecutado.";
+
+        // Paso 4
+        if (estados[4] === "OK")
+            i4.textContent = "Paso 4 OK → Imagen Docker encontrada en ECR.";
+        else if (estados[4] === "KO")
+            i4.textContent = "Paso 4 KO → No se encontró la imagen Docker en ECR.";
+        else
+            i4.textContent = "Paso 4 aún no se ha ejecutado.";
+
+        // Paso 5
+        if (estados[5] === "OK")
+            i5.textContent = "Paso 5 OK → La aplicación responde correctamente en EC2.";
+        else if (estados[5] === "KO")
+            i5.textContent = "Paso 5 KO → La instancia EC2 no responde (IP, puerto o despliegue incorrecto).";
+        else
+            i5.textContent = "Paso 5 aún no se ha ejecutado.";
+    }
+
+    pintarResumen();
+
+    // ----- Exportar PDF -----
+    async function exportarPdf() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        const pasos = [
+            { numero: 1, titulo: "SonarCloud", data: leerResultadoPaso("wizard_paso1") },
+            { numero: 2, titulo: "Integración Sonar ↔ Git", data: leerResultadoPaso("wizard_paso2") },
+            { numero: 3, titulo: "Repositorio Git", data: leerResultadoPaso("wizard_paso3") },
+            { numero: 4, titulo: "Imagen Docker en ECR", data: leerResultadoPaso("wizard_paso4") },
+            { numero: 5, titulo: "Despliegue en EC2", data: leerResultadoPaso("wizard_paso5") }
+        ];
+
+        let y = 20;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text("Informe de comprobaciones CI/CD", 14, y);
+        y += 10;
+
+        const fecha = new Date().toLocaleString();
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.text("Fecha: " + fecha, 14, y);
+        y += 12;
+
+        pasos.forEach(p => {
+            if (y > 260) { doc.addPage(); y = 20; }
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(13);
+            doc.text(`Paso ${p.numero} – ${p.titulo}`, 14, y);
+            y += 6;
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+            doc.text(`Estado: ${p.data.estado}`, 14, y);
+            y += 5;
+
+            const texto = p.data.mensaje || "Sin mensaje.";
+            const lineas = doc.splitTextToSize(texto, 180);
+            doc.text(lineas, 14, y);
+            y += lineas.length * 5 + 4;
+        });
+
+        doc.save("resumen_cicd.pdf");
+    }
+</script>
+
+</body>
+</html>

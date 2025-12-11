@@ -1,8 +1,8 @@
 package com.sistemagestionapp.demojava.controller;
 
 import com.sistemagestionapp.demojava.model.Producto;
-import com.sistemagestionapp.demojava.repository.ProductoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.sistemagestionapp.demojava.model.mongo.ProductoMongo;
+import com.sistemagestionapp.demojava.service.ProductoService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -12,53 +12,65 @@ import java.util.List;
 @Controller
 public class ProductoController {
 
-    @Autowired
-    private ProductoRepository productoRepository;
+    private final ProductoService productoService;
+
+    public ProductoController(ProductoService productoService) {
+        this.productoService = productoService;
+    }
 
     /**
-     * Muestra el formulario y el listado.
-     * Si no se pasa producto concreto, se usa uno nuevo (crear).
+     * Muestra listado + formulario (nuevo o editar).
      */
     @GetMapping("/productos")
     public String listarProductos(Model model) {
-        List<Producto> productos = productoRepository.findAll();
+
+        List<?> productos = productoService.listarTodos();
+
         model.addAttribute("productos", productos);
-        model.addAttribute("producto", new Producto()); // formulario en modo "nuevo"
+
+        // El formulario puede manejar ambos modelos (SQL o Mongo)
+        model.addAttribute("producto", new Producto());
+
         return "productos";
     }
 
     /**
-     * Carga un producto para editarlo reutilizando la misma vista.
+     * Cargar un producto para editarlo.
+     * Para Mongo el id es String, para SQL es Long → por eso usamos String.
      */
     @GetMapping("/productos/editar/{id}")
-    public String editarProducto(@PathVariable Long id, Model model) {
-        Producto producto = productoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + id));
+    public String editarProducto(@PathVariable String id, Model model) {
 
-        List<Producto> productos = productoRepository.findAll();
-
+        List<?> productos = productoService.listarTodos();
         model.addAttribute("productos", productos);
-        model.addAttribute("producto", producto); // formulario en modo "editar"
+
+        // Buscar dependiendo del motor
+        Object producto = productoService.buscarPorId(id);
+        model.addAttribute("producto", producto);
+
         return "productos";
     }
 
     /**
-     * Guarda un producto (nuevo o editado).
-     * Si viene con id = null -> crea
-     * Si viene con id != null -> actualiza
+     * Guardar producto (crear o actualizar).
      */
     @PostMapping("/productos")
-    public String guardarProducto(@ModelAttribute("producto") Producto producto) {
-        productoRepository.save(producto);
+    public String guardarProducto(
+            @RequestParam(required = false) String id,
+            @RequestParam String nombre,
+            @RequestParam(required = false) String descripcion,
+            @RequestParam double precio
+    ) {
+        productoService.guardar(id, nombre, descripcion, precio);
         return "redirect:/productos";
     }
 
     /**
-     * Elimina un producto.
+     * Eliminar producto.
      */
     @GetMapping("/productos/eliminar/{id}")
-    public String eliminarProducto(@PathVariable Long id) {
-        productoRepository.deleteById(id);
+    public String eliminarProducto(@PathVariable String id) {
+        productoService.borrarPorId(id);
         return "redirect:/productos";
     }
 }
