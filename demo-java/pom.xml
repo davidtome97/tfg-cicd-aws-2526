@@ -88,10 +88,17 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
+        <!-- ✅ CLAVE: no filtrar application*.properties -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
+
         <plugins>
             <!-- Plugin de Spring Boot para generar el JAR ejecutable -->
             <plugin>

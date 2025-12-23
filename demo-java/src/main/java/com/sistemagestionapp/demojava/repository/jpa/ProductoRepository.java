@@ -1,4 +1,4 @@
-package com.sistemagestionapp.demojava.repository;
+package com.sistemagestionapp.demojava.repository.jpa;
 
 import com.sistemagestionapp.demojava.model.Producto;
 import org.springframework.data.jpa.repository.JpaRepository;
