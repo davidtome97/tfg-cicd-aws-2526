@@ -1,0 +1,76 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: demojava-mongo
+    profiles: ["local"]     # ✅ solo arranca en local
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER:-demo}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD:-demo}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-demo}
+    networks:
+      - demo-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # ========= APP LOCAL (con mongo del compose) =========
+  demo-java-local:
+    image: ${IMAGE_URI:-demo-java-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demo-java-app
+    profiles: ["local"]
+    environment:
+      SPRING_PROFILES_ACTIVE: mongo
+
+      # Local fallback
+      DB_HOST: ${DB_HOST:-mongo}
+      DB_PORT: ${DB_PORT:-27017}
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+
+      # Si también pasas URI, Spring la prioriza (según tu config)
+      SPRING_DATA_MONGODB_URI: ${SPRING_DATA_MONGODB_URI:-}
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    networks:
+      - demo-net
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ========= APP REMOTA (Atlas) =========
+  demo-java-remote:
+    image: ${IMAGE_URI:-demo-java-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demo-java-app
+    profiles: ["remote"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Djdk.tls.client.protocols=TLSv1.2"
+      SPRING_PROFILES_ACTIVE: mongo
+
+      # ✅ Atlas/remote: usa esta variable (tu config ya la respeta)
+      SPRING_DATA_MONGODB_URI: ${SPRING_DATA_MONGODB_URI:-${DB_URI:-}}
+
+      # (opcionales por si tu app los lee en algún punto)
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    networks:
+      - demo-net
+    restart: unless-stopped
+
+networks:
+  demo-net:
+    driver: bridge

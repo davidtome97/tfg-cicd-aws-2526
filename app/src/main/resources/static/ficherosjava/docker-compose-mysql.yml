@@ -1,0 +1,52 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: demojava-mysql
+    profiles: ["local"]  # SOLO SE LEVANTA EN LOCAL
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-demo}
+      MYSQL_USER: ${DB_USER:-demo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-demo}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+    networks:
+      - demo-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u${DB_USER:-demo} -p${DB_PASSWORD:-demo} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  demo-java:
+    image: ${IMAGE_URI:-demo-java-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demo-java-app
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-mysql}
+      DB_ENGINE: ${DB_ENGINE:-mysql}
+
+      # Si estás en local y no pasas DB_HOST, usará "mysql" (servicio local).
+      # Si estás en remoto, le pasas DB_HOST=tu-endpoint y listo.
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+
+      # Opcionales para remoto (SSL, params, etc.)
+      DB_SSL_MODE: ${DB_SSL_MODE:-}
+      DB_PARAMS: ${DB_PARAMS:-}
+
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    networks:
+      - demo-net
+    restart: unless-stopped
+
+networks:
+  demo-net:
+    driver: bridge

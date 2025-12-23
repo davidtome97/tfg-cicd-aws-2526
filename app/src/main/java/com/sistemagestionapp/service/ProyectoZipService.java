@@ -17,26 +17,23 @@ import java.util.zip.ZipOutputStream;
  *
  * Ahora:
  *  - Copio la carpeta demo-java a un directorio temporal, ignorando target/.
+ *  - Genero el pipeline de CI/CD según el proveedor (GitHub desde plantilla / GitLab desde fichero).
+ *  - Copio el docker-compose adecuado según el motor de base de datos y lo renombro a docker-compose.yml.
  *  - Creo un fichero app-config.properties con los datos básicos de la aplicación.
  *  - Comprimo la carpeta en un fichero .zip.
  *
- * Más adelante:
- *  - Podré elegir plantillas distintas según el lenguaje (JAVA / PYTHON).
+ * Plantillas esperadas en classpath:
+ *  - static/ficherosjava/docker-compose-mysql.yml
+ *  - static/ficherosjava/docker-compose-postgres.yml
+ *  - static/ficherosjava/docker-compose-mongo.yml
+ *  - static/ficherosjava/github-workflow.template.yml
  */
 @Service
 public class ProyectoZipService {
 
-    /**
-     * Genero un ZIP con el proyecto demo-java personalizado con la configuración
-     * de la aplicación.
-     *
-     * @param aplicacion aplicación que estoy usando como base.
-     * @return ruta del fichero ZIP generado en el sistema de ficheros.
-     * @throws IOException si hay cualquier problema de lectura/escritura.
-     */
     public Path generarProyectoJava(Aplicacion aplicacion) throws IOException {
         System.out.println("⚙️ [ZIP] Iniciando generación del ZIP para aplicación: " + aplicacion.getNombre());
-
+        System.out.println("🔥🔥🔥 [ZIP] Estoy usando ProyectoZipService NUEVO (con workflow plantilla) 🔥🔥🔥");
         // Estoy en el módulo "app". La raíz del repo es el padre.
         Path dirActual = Paths.get("").toAbsolutePath();
         System.out.println("📁 Directorio actual (módulo app): " + dirActual);
@@ -58,9 +55,7 @@ public class ProyectoZipService {
         System.out.println("📂 Directorio temporal de trabajo: " + tempDir);
 
         // Nombre de carpeta/zip basado en el nombre de la aplicación
-        String nombreSanitizado = (aplicacion.getNombre() == null || aplicacion.getNombre().isBlank())
-                ? "demo-java-proyecto"
-                : aplicacion.getNombre().toLowerCase().replaceAll("[^a-z0-9\\-]", "-");
+        String nombreSanitizado = sanitizarNombre(aplicacion.getNombre(), "demo-java-proyecto");
 
         // Carpeta raíz del proyecto dentro del directorio temporal
         Path carpetaProyecto = tempDir.resolve(nombreSanitizado);
@@ -70,10 +65,16 @@ public class ProyectoZipService {
         copiarCarpeta(origenDemoJava, carpetaProyecto);
         System.out.println("✅ Copia de demo-java completada");
 
-        // 2) Creo un fichero de configuración con los datos de la Aplicacion
+        // 2) Pipeline CI/CD (GitHub desde plantilla / GitLab desde fichero)
+        copiarPipelineCiCd(carpetaProyecto, aplicacion, raizRepo);
+
+        // 3) docker-compose.yml según motor BD (desde classpath)
+        copiarDockerCompose(carpetaProyecto, aplicacion);
+
+        // 4) app-config.properties
         crearFicheroConfiguracion(carpetaProyecto, aplicacion);
 
-        // 3) Comprimir carpetaProyecto en un zip
+        // 5) Comprimir carpetaProyecto en un zip
         Path zipPath = tempDir.resolve(nombreSanitizado + ".zip");
         System.out.println("🗜️  Comprimiendo carpeta en ZIP: " + zipPath);
         comprimirCarpetaEnZip(carpetaProyecto, zipPath);
@@ -82,9 +83,9 @@ public class ProyectoZipService {
         return zipPath;
     }
 
-    /**
-     * Copio recursivamente una carpeta de origen a destino, ignorando la carpeta target/.
-     */
+    // ==========================================================
+    // COPIA PROYECTO BASE (IGNORANDO target/)
+    // ==========================================================
     private void copiarCarpeta(Path origen, Path destino) throws IOException {
         Path targetDir = origen.resolve("target");
 
@@ -110,10 +111,129 @@ public class ProyectoZipService {
         });
     }
 
+    // ==========================================================
+    // PIPELINE CI/CD
+    // ==========================================================
+    private void copiarPipelineCiCd(Path carpetaProyecto, Aplicacion aplicacion, Path raizRepo) throws IOException {
+        if (aplicacion.getProveedorCiCd() == null) {
+            System.out.println("ℹ️ [ZIP] Proveedor CI/CD no definido. No se copiará/generará ningún pipeline.");
+            return;
+        }
+
+        String proveedor = aplicacion.getProveedorCiCd().name();
+        System.out.println("📦 [ZIP] Preparando pipeline para proveedor: " + proveedor);
+
+        if ("GITHUB".equalsIgnoreCase(proveedor)) {
+            // ✅ Generar workflow GitHub desde plantilla (Opción A)
+            generarWorkflowGithubDesdePlantilla(carpetaProyecto, aplicacion);
+
+        } else if ("GITLAB".equalsIgnoreCase(proveedor)) {
+            // (Por ahora) copiamos el fichero existente del repo
+            Path origenGitlab = raizRepo.resolve(".gitlab-ci.yml");
+            if (!Files.exists(origenGitlab)) {
+                throw new IllegalStateException("No se ha encontrado el fichero .gitlab-ci.yml en: " + origenGitlab);
+            }
+
+            Path destinoGitlab = carpetaProyecto.resolve(".gitlab-ci.yml");
+            Files.copy(origenGitlab, destinoGitlab, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("✅ [ZIP] Pipeline de GitLab copiado a: " + destinoGitlab);
+
+        } else {
+            System.out.println("ℹ️ [ZIP] Proveedor CI/CD no soportado todavía: " + proveedor);
+        }
+    }
+
     /**
-     * Creo un fichero app-config.properties dentro de src/main/resources
-     * con los datos más importantes de la Aplicacion.
+     * Genera .github/workflows/generated-ci.yml a partir de una plantilla en resources:
+     *   static/ficherosjava/github-workflow.template.yml
+     *
+     * Placeholders soportados:
+     *  - __APP_NAME__
      */
+    private void generarWorkflowGithubDesdePlantilla(Path carpetaProyecto, Aplicacion aplicacion) throws IOException {
+        String appName = sanitizarNombre(aplicacion.getNombre(), "mi-proyecto");
+
+        String template;
+        try {
+            template = leerRecursoClasspathComoString("static/ficherosjava/github-workflow.template.yml");
+        } catch (Exception e) {
+            // fallback por si el empaquetado lo deja sin "static/"
+            template = leerRecursoClasspathComoString("ficherosjava/github-workflow.template.yml");
+        }
+
+        String workflow = template
+                .replace("__APP_NAME__", appName);
+
+        Path workflowsDir = carpetaProyecto.resolve(".github").resolve("workflows");
+        Files.createDirectories(workflowsDir);
+
+        Path destinoWorkflow = workflowsDir.resolve("generated-ci.yml");
+        Files.writeString(destinoWorkflow, workflow, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+        System.out.println("✅ [ZIP] Workflow GitHub generado en: " + destinoWorkflow);
+    }
+
+    // ==========================================================
+    // DOCKER-COMPOSE (desde classpath) -> docker-compose.yml
+    // ==========================================================
+    private void copiarDockerCompose(Path carpetaProyecto, Aplicacion aplicacion) throws IOException {
+        if (aplicacion.getTipoBaseDatos() == null) {
+            System.out.println("ℹ️ [ZIP] Tipo de base de datos no definido. No se copiará docker-compose.yml.");
+            return;
+        }
+
+        String tipoBd = aplicacion.getTipoBaseDatos().name();
+        System.out.println("📦 [ZIP] Seleccionando docker-compose para tipo BD: " + tipoBd);
+
+        String nombrePlantilla;
+        switch (tipoBd.toUpperCase()) {
+            case "MYSQL":
+                nombrePlantilla = "docker-compose-mysql.yml";
+                break;
+            case "POSTGRES":
+            case "POSTGRESQL":
+                nombrePlantilla = "docker-compose-postgres.yml";
+                break;
+            case "MONGO":
+            case "MONGODB":
+                nombrePlantilla = "docker-compose-mongo.yml";
+                break;
+            default:
+                System.out.println("ℹ️ [ZIP] Tipo de BD no soportado todavía: " + tipoBd + ". No se copiará docker-compose.yml.");
+                return;
+        }
+
+        String resourcePath = "static/ficherosjava/" + nombrePlantilla;
+
+        // Puerto externo elegido por el usuario (si no hay, default 8081)
+        String appPort = (aplicacion.getPuertoAplicacion() == null || aplicacion.getPuertoAplicacion() <= 0)
+                ? "8081"
+                : String.valueOf(aplicacion.getPuertoAplicacion());
+
+        // Leer plantilla
+        String template;
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new IllegalStateException("No se ha encontrado la plantilla de docker-compose en el classpath: " + resourcePath);
+            }
+            template = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        // Reemplazar placeholders
+        String finalCompose = template.replace("__APP_PORT__", appPort);
+
+        // Escribir docker-compose.yml ya final
+        Path destinoCompose = carpetaProyecto.resolve("docker-compose.yml");
+        Files.writeString(destinoCompose, finalCompose, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+        System.out.println("✅ [ZIP] docker-compose generado con APP_PORT=" + appPort + " en: " + destinoCompose);
+    }
+
+    // ==========================================================
+    // CONFIG APP (app-config.properties)
+    // ==========================================================
     private void crearFicheroConfiguracion(Path carpetaProyecto, Aplicacion aplicacion) throws IOException {
         Path resourcesDir = carpetaProyecto.resolve("src/main/resources");
         Files.createDirectories(resourcesDir);
@@ -154,9 +274,9 @@ public class ProyectoZipService {
         System.out.println("✅ [CONFIG] app-config.properties creado correctamente");
     }
 
-    /**
-     * Comprime una carpeta completa en un fichero ZIP.
-     */
+    // ==========================================================
+    // ZIP
+    // ==========================================================
     private void comprimirCarpetaEnZip(Path carpeta, Path zipDestino) throws IOException {
         try (OutputStream fos = Files.newOutputStream(zipDestino);
              ZipOutputStream zos = new ZipOutputStream(fos)) {
@@ -164,7 +284,7 @@ public class ProyectoZipService {
             Files.walk(carpeta).forEach(path -> {
                 try {
                     if (Files.isDirectory(path)) {
-                        return; // no añado entradas para directorios
+                        return;
                     }
 
                     Path relative = carpeta.relativize(path);
@@ -181,6 +301,29 @@ public class ProyectoZipService {
                 }
             });
         }
+    }
+
+    // ==========================================================
+    // HELPERS
+    // ==========================================================
+    private String leerRecursoClasspathComoString(String resourcePath) throws IOException {
+        ClassLoader cl = getClass().getClassLoader();
+
+        // Debug: ver si está empaquetado en el classpath
+        System.out.println("📄 [ZIP] Buscando recurso en classpath: " + resourcePath);
+        System.out.println("📄 [ZIP] Resource URL: " + cl.getResource(resourcePath));
+
+        try (InputStream is = cl.getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                throw new IllegalStateException("No se ha encontrado el recurso en el classpath: " + resourcePath);
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
+
+    private String sanitizarNombre(String value, String defaultValue) {
+        String base = (value == null || value.isBlank()) ? defaultValue : value;
+        return base.toLowerCase().replaceAll("[^a-z0-9\\-]", "-");
     }
 
     private String s(String value) {
