@@ -6,6 +6,8 @@ import com.sistemagestionapp.demojava.repository.jpa.UsuarioRepository;
 import com.sistemagestionapp.demojava.repository.mongo.UsuarioMongoRepository;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -13,7 +15,6 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.sistemagestionapp.demojava.repository.jpa.UsuarioRepository;
 
 @Service
 public class UsuarioService implements UserDetailsService {
@@ -22,20 +23,26 @@ public class UsuarioService implements UserDetailsService {
     private final UsuarioMongoRepository usuarioMongoRepository;  // null si sql
     private final PasswordEncoder passwordEncoder;
     private final String dbEngine;
+    private final Environment env;
 
     public UsuarioService(
-            ObjectProvider<com.sistemagestionapp.demojava.repository.jpa.UsuarioRepository> usuarioRepository,
-            ObjectProvider<com.sistemagestionapp.demojava.repository.mongo.UsuarioMongoRepository> usuarioMongoRepository,
+            ObjectProvider<UsuarioRepository> usuarioRepository,
+            ObjectProvider<UsuarioMongoRepository> usuarioMongoRepository,
             PasswordEncoder passwordEncoder,
-            @Value("${DB_ENGINE:mysql}") String dbEngine
+            @Value("${DB_ENGINE:mysql}") String dbEngine,
+            Environment env
     ) {
         this.usuarioRepository = usuarioRepository.getIfAvailable();
         this.usuarioMongoRepository = usuarioMongoRepository.getIfAvailable();
         this.passwordEncoder = passwordEncoder;
         this.dbEngine = (dbEngine == null ? "mysql" : dbEngine.toLowerCase());
+        this.env = env;
     }
 
     private boolean isMongo() {
+        // Si el perfil mongo está activo, manda siempre
+        if (env != null && env.acceptsProfiles(Profiles.of("mongo"))) return true;
+        // Fallback por variable
         return "mongo".equalsIgnoreCase(dbEngine);
     }
 

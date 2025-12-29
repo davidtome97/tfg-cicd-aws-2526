@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-
+<div class="d-flex justify-content-end mb-3">
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn btn-outline-danger">
+            Cerrar sesión
+        </button>
+    </form>
+</div>
 <head>
     <meta charset="UTF-8">
     <title>Paso 3 – Comprobar repositorio Git</title>

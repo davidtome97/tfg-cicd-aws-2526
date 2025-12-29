@@ -1,5 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
+<div class="d-flex justify-content-end mb-3">
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn btn-outline-danger">
+            Cerrar sesión
+        </button>
+    </form>
+</div>
 <head>
     <meta charset="UTF-8">
     <title>Listado de aplicaciones</title>
@@ -69,6 +76,11 @@
                 <a th:href="@{/aplicaciones/{id}/zip(id=${app.id})}"
                    class="btn btn-info btn-sm text-white">
                     Descargar ZIP
+                </a>
+                <!-- DESCARGAR VARIABLES -->
+                <a th:href="@{/aplicaciones/{id}/variables(id=${app.id})}"
+                   class="btn btn-outline-primary btn-sm">
+                    Variables (.txt)
                 </a>
 
                 <!-- ASISTENTE -->
