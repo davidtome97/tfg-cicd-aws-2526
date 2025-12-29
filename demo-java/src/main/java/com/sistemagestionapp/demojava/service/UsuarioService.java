@@ -46,6 +46,9 @@ public class UsuarioService implements UserDetailsService {
         return "mongo".equalsIgnoreCase(dbEngine);
     }
 
+    // =========================================================
+    // SPRING SECURITY
+    // =========================================================
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String correo) throws UsernameNotFoundException {
@@ -77,6 +80,33 @@ public class UsuarioService implements UserDetailsService {
                 .build();
     }
 
+    // =========================================================
+    // HELPERS para “productos por usuario”
+    // =========================================================
+
+    @Transactional(readOnly = true)
+    public Usuario obtenerSqlPorCorreo(String correo) {
+        if (isMongo()) {
+            throw new IllegalStateException("obtenerSqlPorCorreo no aplica en Mongo");
+        }
+        if (usuarioRepository == null) throw new IllegalStateException("UsuarioRepository no disponible");
+        return usuarioRepository.findByCorreo(correo)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado en SQL: " + correo));
+    }
+
+    @Transactional(readOnly = true)
+    public UsuarioMongo obtenerMongoPorCorreo(String correo) {
+        if (!isMongo()) {
+            throw new IllegalStateException("obtenerMongoPorCorreo no aplica en SQL");
+        }
+        if (usuarioMongoRepository == null) throw new IllegalStateException("UsuarioMongoRepository no disponible");
+        return usuarioMongoRepository.findByCorreo(correo)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado en Mongo: " + correo));
+    }
+
+    // =========================================================
+    // REGISTRO
+    // =========================================================
     @Transactional(readOnly = true)
     public boolean existePorCorreo(String correo) {
         if (isMongo()) {
@@ -89,11 +119,20 @@ public class UsuarioService implements UserDetailsService {
 
     @Transactional
     public void registrarUsuario(Usuario usuario) {
+        if (usuario == null) throw new IllegalArgumentException("usuario es obligatorio");
+
+        // Normaliza correo por seguridad
+        if (usuario.getCorreo() != null) {
+            usuario.setCorreo(usuario.getCorreo().trim().toLowerCase());
+        }
+
+        // Si ya existe, no hacemos nada (puedes cambiarlo a excepción si prefieres)
+        if (existePorCorreo(usuario.getCorreo())) return;
+
         usuario.setPassword(passwordEncoder.encode(usuario.getPassword()));
 
         if (isMongo()) {
             if (usuarioMongoRepository == null) throw new IllegalStateException("UsuarioMongoRepository no disponible");
-            if (usuarioMongoRepository.existsByCorreo(usuario.getCorreo())) return;
 
             UsuarioMongo um = new UsuarioMongo();
             um.setNombre(usuario.getNombre());
@@ -104,8 +143,6 @@ public class UsuarioService implements UserDetailsService {
         }
 
         if (usuarioRepository == null) throw new IllegalStateException("UsuarioRepository no disponible");
-        if (usuarioRepository.existsByCorreo(usuario.getCorreo())) return;
-
         usuarioRepository.save(usuario);
     }
 }
