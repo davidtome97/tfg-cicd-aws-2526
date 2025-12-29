@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-
+<div class="d-flex justify-content-end mb-3">
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn btn-outline-danger">
+            Cerrar sesión
+        </button>
+    </form>
+</div>
 <head>
     <meta charset="UTF-8">
-    <title>Paso 1 – Comprobar Sonar</title>
+    <title>Paso 1 – Configuración de SonarCloud</title>
 
     <!-- Bootstrap para estilos -->
     <link rel="stylesheet"
@@ -14,25 +20,49 @@
 
 <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/" >Sistema CI/CD – Paso 1</a>
+        <a class="navbar-brand" href="/">Sistema CI/CD – Paso 1</a>
     </div>
 </nav>
 
 <div class="container">
 
-    <h2 class="mb-3">Paso 1 – Comprobar Sonar</h2>
-    <p class="text-muted">Introduce el token y el projectKey para validar la conexión con SonarCloud.</p>
+    <!-- Cabecera + botón ayuda -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Paso 1 – Configuración de SonarCloud</h2>
+
+        <!-- Botón "Ver guía de este paso" -->
+        <a href="/manuales/paso1-sonarcloud.pdf" target="_blank"
+           class="btn btn-outline-secondary btn-sm">
+            Ver guía de este paso
+        </a>
+    </div>
+
+    <p class="text-muted">
+        En este paso se valida la conexión con SonarCloud. El asistente asume la URL
+        <code>https://sonarcloud.io</code> y obtiene la organización a partir de la clave de proyecto,
+        por lo que únicamente es necesario introducir el <strong>projectKey</strong> y el
+        <strong>token</strong> de SonarCloud.
+    </p>
 
     <!-- FORM -->
     <div class="card p-4 shadow-sm">
         <div class="mb-3">
-            <label class="form-label">Token SonarCloud</label>
-            <input id="token" class="form-control" placeholder="Token SonarCloud">
+            <label class="form-label">ProjectKey (SONAR_PROJECT_KEY)</label>
+            <input id="projectKey" class="form-control"
+                   placeholder="Ej: mi-organizacion_mi-proyecto">
+            <div class="form-text">
+                Debe corresponder con la clave de proyecto configurada en SonarCloud.
+                La organización se extraerá automáticamente a partir de este valor.
+            </div>
         </div>
 
         <div class="mb-3">
-            <label class="form-label">ProjectKey</label>
-            <input id="projectKey" class="form-control" placeholder="Ej: mi-proyecto">
+            <label class="form-label">Token SonarCloud (SONAR_TOKEN)</label>
+            <input id="token" class="form-control" placeholder="Token SonarCloud">
+            <div class="form-text">
+                Token personal generado en SonarCloud. No debe almacenarse en el repositorio,
+                solo en variables secretas.
+            </div>
         </div>
 
         <button onclick="ejecutarPaso1()" class="btn btn-primary">Comprobar</button>

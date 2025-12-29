@@ -18,6 +18,8 @@ public class Aplicacion {
     @Enumerated(EnumType.STRING)
     private Lenguaje lenguaje;
 
+
+
     @Enumerated(EnumType.STRING)
     private ProveedorCiCd proveedorCiCd;
 
@@ -40,6 +42,9 @@ public class Aplicacion {
     @JoinColumn(name = "usuario_id")
     private Usuario propietario;
 
+    @Column(name = "db_modo")
+    private String dbModo; // local | remote
+
     @OneToMany(mappedBy = "aplicacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ControlDespliegue> controles = new ArrayList<>();
 
@@ -53,6 +58,14 @@ public class Aplicacion {
     }
 
     // --- Getters y setters ---
+
+    public String getDbModo() {
+        return dbModo;
+    }
+
+    public void setDbModo(String dbModo) {
+        this.dbModo = dbModo;
+    }
 
     public Long getId() {
         return id;

@@ -1,0 +1,297 @@
+name: CI-__APP_NAME__
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["*"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python (3.11)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+          # opcional: si usas dev deps en requirements-dev.txt
+          if [ -f "requirements-dev.txt" ]; then
+            pip install -r requirements-dev.txt
+          fi
+
+      - name: Lint (optional)
+        run: |
+          # si no usas flake8, puedes borrar este step
+          if python -c "import flake8" 2>/dev/null; then
+            flake8 . || true
+          else
+            echo "flake8 no instalado. Skipping."
+          fi
+
+      - name: Test (pytest)
+        run: |
+          # si no usas pytest, cambia este comando
+          pytest -q
+
+  sonar:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python (3.11)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies (for tests/coverage)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          fi
+          if [ -f "requirements-dev.txt" ]; then
+            pip install -r requirements-dev.txt
+          fi
+
+      - name: SonarCloud Analysis (optional)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ secrets.SONAR_ORGANIZATION }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_PROJECT_KEY" ] || [ -z "$SONAR_ORGANIZATION" ]; then
+            echo "Sonar secrets not configured. Skipping Sonar analysis."
+            exit 0
+          fi
+
+          if [ -z "$SONAR_HOST_URL" ]; then
+            SONAR_HOST_URL="https://sonarcloud.io"
+          fi
+
+          # opcional: generar coverage.xml si lo usas
+          if python -c "import pytest" 2>/dev/null; then
+            pytest -q --disable-warnings --maxfail=1 --cov=. --cov-report=xml || true
+          fi
+
+          # instala sonar-scanner CLI
+          curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+          unzip -q sonar-scanner.zip
+          export PATH="$PWD/sonar-scanner-*/bin:$PATH"
+
+          # Si tienes sonar-project.properties en el repo, sonar-scanner lo leerá.
+          # Si no, lo pasamos por parámetros mínimos:
+          sonar-scanner \
+            -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+            -Dsonar.organization="${SONAR_ORGANIZATION}" \
+            -Dsonar.host.url="${SONAR_HOST_URL}" \
+            -Dsonar.login="${SONAR_TOKEN}" \
+            -Dsonar.sources="." \
+            -Dsonar.python.version="3.11" \
+            -Dsonar.coverage.exclusions="**/tests/**" \
+            -Dsonar.python.coverage.reportPaths="coverage.xml"
+
+  build_and_push_ecr:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push Docker image
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -e
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          echo "Building image: ${IMAGE_URI}"
+          docker build -t "${IMAGE_URI}" .
+
+          echo "Tagging latest..."
+          docker tag "${IMAGE_URI}" "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+
+          echo "Pushing images..."
+          docker push "${IMAGE_URI}"
+          docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+
+          echo "Done ✅"
+
+  deploy_ec2:
+    runs-on: ubuntu-latest
+    needs: build_and_push_ecr
+    if: startsWith(github.ref, 'refs/tags/')
+
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_LLAVE_SSH: ${{ secrets.EC2_LLAVE_SSH }}
+      EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+
+      IMAGE_TAG: ${{ github.sha }}
+
+      DB_MODE: ${{ secrets.DB_MODE }}
+      DB_ENGINE: ${{ secrets.DB_ENGINE }}
+      DB_PORT: ${{ secrets.DB_PORT }}
+      DB_NAME: ${{ secrets.DB_NAME }}
+      DB_URI: ${{ secrets.DB_URI }}
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_USER: ${{ secrets.DB_USER }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+
+      APP_PORT: ${{ secrets.APP_PORT }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar clave SSH
+        shell: bash
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf "%s" "${EC2_LLAVE_SSH}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+          if [ -n "${EC2_KNOWN_HOSTS}" ]; then
+            printf "%s\n" "${EC2_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+          fi
+
+      - name: Subir docker-compose.yml a EC2
+        shell: bash
+        run: |
+          set -e
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:~/app/docker-compose.yml"
+
+      - name: Deploy en EC2
+        shell: bash
+        run: |
+          set -e
+
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes \
+            "${EC2_USER}@${EC2_HOST}" \
+            "export DB_MODE='${DB_MODE}';
+            export DB_ENGINE='${DB_ENGINE}';
+            export DB_PORT='${DB_PORT}';
+            export DB_NAME='${DB_NAME}';
+            export APP_PORT='${APP_PORT}';
+            export DB_HOST='${DB_HOST}';
+            export DB_USER='${DB_USER}';
+            export DB_PASSWORD='${DB_PASSWORD}';
+            export DB_URI='${DB_URI}';
+            export AWS_REGION='${AWS_REGION}';
+            export AWS_ACCOUNT_ID='${AWS_ACCOUNT_ID}';
+            export ECR_REPOSITORY='${ECR_REPOSITORY}';
+            export IMAGE_TAG='${IMAGE_TAG}';
+            bash -se" <<'EOF'
+            set -euo pipefail
+
+            clean() { printf '%s' "${1:-}" | tr -d '\r' | tr -d '\n'; }
+
+            cd ~/app
+            rm -f .env .env.local .env.remote || true
+
+            export COMPOSE_PROJECT_NAME="demo-python"
+
+            DB_MODE_IN="$(clean "${DB_MODE:-local}")"
+            [ -z "$DB_MODE_IN" ] && DB_MODE_IN="local"
+            if [ "$DB_MODE_IN" != "local" ] && [ "$DB_MODE_IN" != "remote" ]; then
+              echo "DB_MODE inválido: $DB_MODE_IN (usa local|remote)"
+              exit 1
+            fi
+            export COMPOSE_PROFILES="$DB_MODE_IN"
+
+            export DB_ENGINE="$(clean "${DB_ENGINE:-postgres}")"
+            export DB_PORT="$(clean "${DB_PORT:-5432}")"
+            export DB_NAME="$(clean "${DB_NAME:-demo}")"
+            export APP_PORT="$(clean "${APP_PORT:-8081}")"
+
+            AWS_REGION_IN="$(clean "${AWS_REGION}")"
+            AWS_ACCOUNT_ID_IN="$(clean "${AWS_ACCOUNT_ID}")"
+            ECR_REPO_IN="$(clean "${ECR_REPOSITORY}")"
+            IMAGE_TAG_IN="$(clean "${IMAGE_TAG}")"
+            ECR_REGISTRY="${AWS_ACCOUNT_ID_IN}.dkr.ecr.${AWS_REGION_IN}.amazonaws.com"
+            export IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO_IN}:${IMAGE_TAG_IN}"
+
+            if [ "$COMPOSE_PROFILES" = "remote" ]; then
+              if [ "$DB_ENGINE" = "mongo" ]; then
+                export DB_URI="$(clean "${DB_URI:-}")"
+                if [ -z "$DB_URI" ]; then
+                  echo "Falta secret para mongo remoto: DB_URI"
+                  exit 1
+                fi
+                unset DB_HOST DB_PORT DB_USER DB_PASSWORD || true
+              else
+                export DB_HOST="$(clean "${DB_HOST:-}")"
+                export DB_USER="$(clean "${DB_USER:-}")"
+                export DB_PASSWORD="$(clean "${DB_PASSWORD:-}")"
+                if [ -z "$DB_HOST" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASSWORD" ]; then
+                  echo "Faltan secrets para remote SQL: DB_HOST, DB_USER, DB_PASSWORD"
+                  exit 1
+                fi
+              fi
+            else
+              export DB_USER="$(clean "${DB_USER:-demo}")"
+              export DB_PASSWORD="$(clean "${DB_PASSWORD:-demo}")"
+            fi
+
+            if ! command -v aws >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y awscli
+            fi
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y docker.io
+              sudo systemctl enable --now docker
+            fi
+            if ! sudo docker compose version >/dev/null 2>&1; then
+              sudo mkdir -p /usr/local/lib/docker/cli-plugins
+              sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
+                -o /usr/local/lib/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            fi
+
+            aws ecr get-login-password --region "$AWS_REGION_IN" \
+              | sudo -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+            sudo -E docker compose --env-file /dev/null -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" down --remove-orphans || true
+            sudo -E docker compose --env-file /dev/null -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" pull
+            sudo -E docker compose --env-file /dev/null -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" up -d --remove-orphans
+
+            echo "Estado:"
+            sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+          EOF

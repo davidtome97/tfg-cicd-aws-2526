@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-
+<div class="d-flex justify-content-end mb-3">
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn btn-outline-danger">
+            Cerrar sesión
+        </button>
+    </form>
+</div>
 <head>
     <meta charset="UTF-8">
     <title>Paso 4 – Comprobar imagen en ECR</title>
@@ -20,6 +26,10 @@
 <div class="container">
 
     <h2 class="mb-3">Paso 4 – Comprobar imagen en ECR</h2>
+    <a href="/manuales/paso4-AwsErc.pdf" target="_blank"
+       class="btn btn-outline-secondary btn-sm">
+        Ver guía de este paso
+    </a>
     <p class="text-muted">
         Se comprueba que existe una imagen Docker en tu repositorio de Amazon ECR
         con el <strong>nombre</strong> y el <strong>tag</strong> indicados.
