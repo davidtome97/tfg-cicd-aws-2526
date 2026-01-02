@@ -179,16 +179,17 @@ jobs:
         run: scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "$EC2_USER@$EC2_HOST:~/app/docker-compose.yml"
 
       - name: Ejecutar despliegue en EC2
-        # Aquí hago login en ECR, actualizo contenedores y limpio imágenes antiguas.
         run: |
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -e
+
+            # Asegura carpeta de app
+            mkdir -p ~/app
 
             export AWS_REGION='${AWS_REGION}'
             export AWS_ECR_URL='${AWS_ECR_URL}'
             export ECR_REPOSITORY='${ECR_REPOSITORY}'
 
-            # Paso las variables de base de datos al entorno
             export DB_ENGINE='${DB_ENGINE}'
             export DB_HOST='${DB_HOST}'
             export DB_PORT='${DB_PORT}'
@@ -196,19 +197,21 @@ jobs:
             export DB_USER='${DB_USER}'
             export DB_PASSWORD='${DB_PASSWORD}'
 
-            # Construyo el host del registry
             REGISTRY_NO_PROTO=\"\${AWS_ECR_URL#https://}\"
             REGISTRY_HOST=\"\${REGISTRY_NO_PROTO%/}\"
-
-            # Imagen que usarán los servicios del docker-compose
             export IMAGE_URI=\"\${REGISTRY_HOST}/\${ECR_REPOSITORY}:latest\"
 
-            echo 'Haciendo login en ECR desde la EC2'
+            echo 'Comprobando Docker en EC2'
+            sudo systemctl enable --now docker || true
+
+            echo 'Login ECR (sin tocar ~/.docker)'
+            export DOCKER_CONFIG=/tmp/.docker
+            sudo mkdir -p /tmp/.docker
             aws ecr get-login-password --region \"${AWS_REGION}\" \
-              | docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
+              | sudo docker login --username AWS --password-stdin \"\${REGISTRY_HOST}\"
 
             cd ~/app
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker image prune -f
+            sudo docker compose pull
+            sudo docker compose up -d --remove-orphans
+            sudo docker image prune -f
           "

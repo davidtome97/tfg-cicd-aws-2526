@@ -1,0 +1,45 @@
+pipeline {
+agent any   // Uso un agente genérico porque este pipeline no necesita nada específico por ahora.
+
+stages {
+
+stage('Checkout') {
+steps {
+// Descargo el código del repositorio usando la configuración por defecto de Jenkins.
+checkout scm
+}
+}
+
+stage('Build') {
+steps {
+// Compilo el proyecto con Maven. Aquí salto los tests porque se ejecutan en la etapa siguiente.
+sh "./mvnw -B -DskipTests clean package"
+}
+}
+
+stage('Test') {
+steps {
+// Aquí ya ejecuto los tests de Maven sin saltarlos.
+sh "./mvnw -B test"
+}
+}
+
+{% if use_sonar %}
+    stage('Sonar') {
+    steps {
+    // Aquí lanzaría el análisis de Sonar, todavía no lo tengo configurado en Jenkins.
+    echo 'Aquí iría el análisis Sonar para {{ project_name }}'
+    }
+    }
+{% endif %}
+
+{% if use_aws %}
+    stage('Deploy AWS') {
+    steps {
+    // Esta etapa sería para desplegar en AWS (ECR/EC2). Aún no lo tengo montado en Jenkins.
+    echo 'Aquí iría el despliegue a AWS para {{ project_name }}'
+    }
+    }
+{% endif %}
+}
+}

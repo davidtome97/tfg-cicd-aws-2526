@@ -1,0 +1,54 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: demopython-mongo
+    profiles: ["local"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER:-demo}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD:-demo}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-demo}
+    networks: [demo-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  demo-python-local:
+    build: .
+    image: ${IMAGE_URI:-demo-python-local}
+    container_name: demo-python-app-local
+    profiles: ["local"]
+    environment:
+      DB_ENGINE: mongo
+      DB_HOST: ${DB_HOST:-mongo}
+      DB_PORT: ${DB_PORT:-27017}
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+    ports:
+      - "${APP_PORT:-8082}:5000"
+    networks: [demo-net]
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  demo-python-remote:
+    image: "${IMAGE_URI?ERROR define IMAGE_URI for remote}"
+    container_name: demo-python-app-remote
+    profiles: ["remote"]
+    environment:
+      DB_ENGINE: mongo
+      DB_URI: "${DB_URI?ERROR define DB_URI for remote}"
+      DB_NAME: ${DB_NAME:-demo}
+    ports:
+      - "${APP_PORT:-8082}:5000"
+    networks: [demo-net]
+    restart: unless-stopped
+
+networks:
+  demo-net:
+    driver: bridge

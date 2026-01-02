@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Paso 6 – Configurar Base de Datos</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <meta name="appId" th:content="${appId}">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="btn btn-outline-danger">Cerrar sesión</button>
+        </form>
+    </div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/aplicaciones}">Sistema CI/CD – Paso 6</a>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="mb-0">Paso 6 – Configurar Base de Datos</h2>
+    </div>
+    <p class="text-muted">
+        Este paso es solo de <b>ayuda</b>. Elige modo y motor y descarga un PDF con las variables que debes crear en <b>GitHub Secrets</b>.
+    </p>
+
+    <div class="card p-4 shadow-sm">
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Modo</label>
+                <select id="mode" class="form-select">
+                    <option value="local" selected>local</option>
+                    <option value="remote">remote</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Motor</label>
+                <select id="engine" class="form-select">
+                    <option value="postgres" selected>PostgreSQL</option>
+                    <option value="mysql">MySQL</option>
+                    <option value="mongo">MongoDB</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Puerto (opcional)</label>
+                <input id="port" class="form-control" placeholder="5432 / 3306 / 27017">
+                <div class="form-text">Vacío = puerto por defecto del motor.</div>
+            </div>
+        </div>
+
+        <div class="mt-4 d-flex gap-2">
+            <button type="button" class="btn btn-primary" onclick="descargarPdf()">
+                Descargar PDF
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleAyuda()">
+                Mostrar/Ocultar ayuda
+            </button>
+        </div>
+
+        <div id="ayuda" class="mt-4" style="display:none;">
+            <hr>
+            <div class="alert alert-info mb-0">
+                <b>local</b>: docker-compose levanta la BD dentro de EC2.<br>
+                <b>remote</b>: la BD es externa (RDS/Atlas). Recuerda crearla antes y poner credenciales en Secrets.
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- ESTADO inicial desde BD (controlPaso) -->
+        <p class="mt-3 fs-5">
+            Estado:
+            <span id="estado"
+                  class="badge bg-secondary"
+                  th:text="${controlPaso != null ? controlPaso.estado : 'PENDIENTE'}">
+        PENDIENTE
+      </span>
+        </p>
+
+        <p id="mensaje" class="text-muted mb-0"
+           th:text="${controlPaso != null ? controlPaso.mensaje : 'Guía: descarga el PDF y crea los secrets.'}">
+        </p>
+
+    </div>
+
+    <div class="mt-3 d-flex justify-content-between">
+        <a th:href="@{/wizard/paso5(appId=${appId})}" class="btn btn-link">&larr; Volver al paso 5</a>
+        <a th:href="@{/wizard/resumen(appId=${appId})}" class="btn btn-link">Ir al resumen &rarr;</a>
+    </div>
+
+</div>
+
+<script>
+    function getAppId() {
+        const meta = document.querySelector('meta[name="appId"]');
+        return meta ? meta.getAttribute("content") : "";
+    }
+
+    function toggleAyuda() {
+        const el = document.getElementById("ayuda");
+        el.style.display = (el.style.display === "none") ? "block" : "none";
+    }
+
+    function descargarPdf() {
+        const appId = getAppId();
+        const mode = document.getElementById("mode").value;
+        const engine = document.getElementById("engine").value;
+        const port = document.getElementById("port").value || "";
+
+        const url = `/wizard/paso6/pdf?appId=${encodeURIComponent(appId)}`
+            + `&mode=${encodeURIComponent(mode)}`
+            + `&engine=${encodeURIComponent(engine)}`
+            + `&port=${encodeURIComponent(port)}`;
+
+        window.location.href = url;
+    }
+</script>
+
+</body>
+</html>
