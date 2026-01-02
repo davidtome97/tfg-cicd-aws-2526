@@ -1,36 +1,40 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-<div class="d-flex justify-content-end mb-3">
-    <form th:action="@{/logout}" method="post">
-        <button type="submit" class="btn btn-outline-danger">
-            Cerrar sesión
-        </button>
-    </form>
-</div>
 <head>
     <meta charset="UTF-8">
     <title>Paso 2 – Comprobar integración Sonar–Git</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <!-- appId disponible en JS -->
+    <meta name="appId" th:content="${appId}">
 </head>
 
 <body class="bg-light">
 
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="btn btn-outline-danger">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+
 <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/">Sistema CI/CD – Paso 2</a>
+        <a class="navbar-brand" th:href="@{/aplicaciones}">Sistema CI/CD – Paso 2</a>
     </div>
 </nav>
 
 <div class="container">
 
-    <!-- Cabecera + botón ayuda -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0">Paso 2 – Comprobar integración Sonar–Git</h2>
 
-        <!-- Botón "Ver guía de este paso" -->
-        <a href="/manuales/paso2-sonar-git.pdf" target="_blank"
+        <a href="/manuales/paso_2.pdf" target="_blank"
            class="btn btn-outline-secondary btn-sm">
             Ver guía de este paso
         </a>
@@ -42,7 +46,6 @@
         (<code>SONAR_PROJECT_KEY</code>) configurada en el Paso 1.
     </p>
 
-    <!-- FORM -->
     <div class="card p-4 shadow-sm">
         <div class="mb-3">
             <label class="form-label">ProjectKey</label>
@@ -53,23 +56,32 @@
             </div>
         </div>
 
-        <button onclick="ejecutarPaso2()" class="btn btn-primary">Comprobar</button>
+        <button type="button" onclick="ejecutarPaso2()" class="btn btn-primary">
+            Comprobar
+        </button>
 
         <hr>
 
-        <!-- ESTADO -->
+        <!-- ESTADO inicial desde BD (controlPaso) -->
         <p class="mt-3 fs-5">
-            Estado: <span id="estado" class="badge bg-secondary">PENDIENTE</span>
+            Estado:
+            <span id="estado"
+                  class="badge bg-secondary"
+                  th:text="${controlPaso != null ? controlPaso.estado : 'PENDIENTE'}">
+                PENDIENTE
+            </span>
         </p>
-        <p id="mensaje" class="text-muted"></p>
+
+        <p id="mensaje" class="text-muted mb-0"
+           th:text="${controlPaso != null ? controlPaso.mensaje : ''}"></p>
     </div>
 
     <div class="d-flex justify-content-between mt-3">
-        <a href="/wizard/paso1" class="btn btn-link">
+        <a th:href="@{/wizard/paso1(appId=${appId})}" class="btn btn-link">
             &larr; Volver al paso 1
         </a>
 
-        <a href="/wizard/paso3" class="btn btn-link">
+        <a th:href="@{/wizard/paso3(appId=${appId})}" class="btn btn-link">
             Ir al paso 3 &rarr;
         </a>
     </div>
@@ -77,34 +89,58 @@
 </div>
 
 <script>
-    function ejecutarPaso2() {
-        const projectKey = document.getElementById("projectKey").value;
+    function getAppId() {
+        const meta = document.querySelector('meta[name="appId"]');
+        const appId = meta ? meta.getAttribute("content") : null;
+        if (!appId) {
+            alert("Falta appId. Vuelve al listado y entra al asistente desde una aplicación.");
+            throw new Error("appId missing");
+        }
+        return appId;
+    }
 
-        fetch(`/api/wizard/paso2?projectKey=${encodeURIComponent(projectKey)}`)
-            .then(res => res.json())
-            .then(data => {
-                document.getElementById("estado").innerText = data.estado;
-                document.getElementById("mensaje").innerText = data.mensaje;
+    function setEstadoUI(estado, mensaje) {
+        const badge = document.getElementById("estado");
+        const msg = document.getElementById("mensaje");
 
-                if (data.estado === "OK") {
-                    document.getElementById("estado").className = "badge bg-success";
-                } else {
-                    document.getElementById("estado").className = "badge bg-danger";
-                }
+        badge.innerText = estado || "N/A";
+        msg.innerText = mensaje || "";
 
-                sessionStorage.setItem("wizard_paso2", JSON.stringify(data));
-            })
-            .catch(() => {
-                document.getElementById("estado").innerText = "KO";
-                document.getElementById("estado").className = "badge bg-danger";
-                document.getElementById("mensaje").innerText =
-                    "Error llamando al backend en el paso 2.";
+        if (estado === "OK") badge.className = "badge bg-success";
+        else if (estado === "KO") badge.className = "badge bg-danger";
+        else badge.className = "badge bg-secondary";
+    }
 
-                sessionStorage.setItem(
-                    "wizard_paso2",
-                    JSON.stringify({ estado: "KO", mensaje: "Error llamando al backend en el paso 2." })
-                );
-            });
+    // Pintar color al cargar (según lo que venga de BD)
+    (function pintarEstadoInicial(){
+        const badge = document.getElementById("estado");
+        if (!badge) return;
+        const estado = (badge.textContent || "").trim();
+
+        if (estado === "OK") badge.className = "badge bg-success";
+        else if (estado === "KO") badge.className = "badge bg-danger";
+        else badge.className = "badge bg-secondary";
+    })();
+
+    async function ejecutarPaso2() {
+        const appId = getAppId();
+        const projectKey = document.getElementById("projectKey").value || "";
+
+        try {
+            setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
+
+            const url = `/api/wizard/paso2?appId=${encodeURIComponent(appId)}`
+                + `&projectKey=${encodeURIComponent(projectKey)}`;
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("HTTP " + res.status);
+
+            const data = await res.json();
+            setEstadoUI(data.estado, data.mensaje);
+
+        } catch (e) {
+            setEstadoUI("KO", "Error llamando al backend en el paso 2.");
+        }
     }
 </script>
 

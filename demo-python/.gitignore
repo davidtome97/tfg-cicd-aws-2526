@@ -1,0 +1,11 @@
+# Entornos virtuales
+venv/
+
+# Cache de Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Variables locales
+.envinstance/*.db
+venv/

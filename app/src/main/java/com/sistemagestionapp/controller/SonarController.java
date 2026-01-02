@@ -17,21 +17,20 @@ public class SonarController {
         this.sonarService = sonarService;
     }
 
-    // PASO 1 – Comprueba token + projectKey (existe el proyecto)
     @GetMapping("/paso1")
     public ResultadoPaso comprobarPaso1(
+            @RequestParam Long appId,
             @RequestParam String token,
             @RequestParam String projectKey) {
 
-        return sonarService.comprobarSonar(token, projectKey);
+        return sonarService.comprobarSonar(appId, token, projectKey);
     }
 
-    // PASO 2 – Solo necesita el projectKey (comprueba análisis Sonar–Git)
     @GetMapping("/paso2")
     public ResultadoPaso comprobarPaso2(
+            @RequestParam Long appId,
             @RequestParam String projectKey) {
 
-        // El método ya ignora el token, solo mira los análisis del proyecto
-        return sonarService.comprobarIntegracionSonarGit(null, projectKey);
+        return sonarService.comprobarIntegracionSonarGit(appId, null, projectKey);
     }
 }

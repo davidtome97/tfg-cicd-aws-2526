@@ -53,8 +53,17 @@
             01/01/2025 12:00
         </td>
 
-        <td>0 / 6</td>
-        <td>--</td>
+        <td th:text="${progresoPorApp[app.id] != null
+              ? (progresoPorApp[app.id].ok + ' / ' + progresoPorApp[app.id].total)
+              : '0 / 6'}">
+            0 / 6
+        </td>
+
+        <td th:text="${estadoPorApp != null && estadoPorApp[app.id] != null
+              ? estadoPorApp[app.id]
+              : '--'}">
+            --
+        </td>
 
         <td>
             <div class="d-flex gap-2 flex-wrap">
@@ -84,8 +93,7 @@
                 </a>
 
                 <!-- ASISTENTE -->
-                <a th:href="@{/wizard/paso1}"
-                   class="btn btn-primary btn-sm">
+                <a th:href="@{/wizard/paso0(appId=${app.id})}" class="btn btn-primary btn-sm">
                     Asistente
                 </a>
 

@@ -1,10 +1,14 @@
 package com.sistemagestionapp.controller;
 
 import com.sistemagestionapp.model.Aplicacion;
+import com.sistemagestionapp.model.EstadoControl;
 import com.sistemagestionapp.model.Lenguaje;
+import com.sistemagestionapp.model.PasoDespliegue;
 import com.sistemagestionapp.model.ProveedorCiCd;
 import com.sistemagestionapp.model.TipoBaseDatos;
 import com.sistemagestionapp.model.Usuario;
+import com.sistemagestionapp.model.dto.ProgresoDespliegue;
+import com.sistemagestionapp.repository.ControlDespliegueRepository;
 import com.sistemagestionapp.service.AplicacionService;
 import com.sistemagestionapp.service.UsuarioService;
 import com.sistemagestionapp.service.VariablesSecretTxtService;
@@ -17,7 +21,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/aplicaciones")
@@ -32,9 +38,11 @@ public class AplicacionController {
     @Autowired
     private ZipGeneratorService zipGeneratorService;
 
-
     @Autowired
     private VariablesSecretTxtService variablesSecretTxtService;
+
+    @Autowired
+    private ControlDespliegueRepository controlDespliegueRepository;
 
     @GetMapping
     public String listarAplicaciones(Model model, Principal principal) {
@@ -42,7 +50,33 @@ public class AplicacionController {
         Usuario propietario = usuarioService.obtenerPorCorreo(correo);
 
         List<Aplicacion> aplicaciones = aplicacionService.listarPorPropietario(propietario);
+
+        Map<Long, ProgresoDespliegue> progresoPorApp = new HashMap<>();
+        Map<Long, String> estadoPorApp = new HashMap<>();
+
+        int totalPasos = PasoDespliegue.values().length;
+
+        for (Aplicacion app : aplicaciones) {
+            long ok = controlDespliegueRepository
+                    .countByAplicacionIdAndEstado(app.getId(), EstadoControl.OK);
+
+            progresoPorApp.put(app.getId(), new ProgresoDespliegue(ok, totalPasos));
+
+            String estado;
+            if (ok == 0) {
+                estado = "PENDIENTE";
+            } else if (ok >= totalPasos) {
+                estado = "OK";
+            } else {
+                estado = "EN PROGRESO";
+            }
+
+            estadoPorApp.put(app.getId(), estado);
+        }
+
         model.addAttribute("aplicaciones", aplicaciones);
+        model.addAttribute("progresoPorApp", progresoPorApp);
+        model.addAttribute("estadoPorApp", estadoPorApp);
 
         return "aplicaciones";
     }
@@ -71,13 +105,6 @@ public class AplicacionController {
         return "aplicacion-form";
     }
 
-    /**
-     * Descarga un .txt con variables/secrets sugeridas según la configuración.
-     * Se alimenta con query params enviados desde el formulario:
-     * - dbModo (local|remote)
-     * - dbUri (opcional, sobre todo mongo remote)
-     * - ecrRepository (opcional)
-     */
     @GetMapping("/{id}/variables")
     public void descargarVariables(@PathVariable Long id,
                                    HttpServletResponse response) throws IOException {
@@ -107,9 +134,6 @@ public class AplicacionController {
         return "redirect:/aplicaciones";
     }
 
-    /**
-     * Descarga el ZIP generado (JAVA o PYTHON) con pipeline + compose + config.
-     */
     @GetMapping("/{id}/zip")
     public void descargarZip(@PathVariable Long id, HttpServletResponse response) throws IOException {
         zipGeneratorService.generarZipAplicacion(id, response);

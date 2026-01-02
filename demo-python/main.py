@@ -192,9 +192,16 @@ def logout():
 @app.route("/")
 @login_required
 def lista_productos():
+    # Identidad del usuario logueado
+    owner = current_user.get_id()  # email en Mongo; en SQL no lo usamos para filtrar
+
     # ---------- MODO MONGO ----------
     if DB_ENGINE == "mongo":
-        docs = list(mongo_productos.find({})) if mongo_productos is not None else []
+        docs = (
+            list(mongo_productos.find({"owner": owner}))
+            if mongo_productos is not None
+            else []
+        )
         productos = [
             ProductoView(
                 _id=str(doc.get("_id")),
@@ -210,7 +217,13 @@ def lista_productos():
         )
 
     # ---------- MODO SQL ----------
-    productos_sql = db.session.execute(db.select(Producto)).scalars().all()
+    productos_sql = (
+        db.session.execute(
+            db.select(Producto).where(Producto.user_id == current_user.id)
+        )
+        .scalars()
+        .all()
+    )
     return render_template(
         "index.html",
         productos=productos_sql,
@@ -232,11 +245,13 @@ def crear_producto():
     # ---------- MODO MONGO ----------
     if DB_ENGINE == "mongo":
         if mongo_productos is not None:
-            mongo_productos.insert_one({"nombre": nombre, "precio": precio})
+            mongo_productos.insert_one(
+                {"nombre": nombre, "precio": precio, "owner": current_user.get_id()}
+            )
         return redirect(url_for("lista_productos"))
 
     # ---------- MODO SQL ----------
-    prod = Producto(nombre=nombre, precio=precio)
+    prod = Producto(nombre=nombre, precio=precio, user_id=current_user.id)
     db.session.add(prod)
     db.session.commit()
 
@@ -252,13 +267,15 @@ def editar_producto(producto_id: str):
             flash("Error de configuración en Mongo.")
             return redirect(url_for("lista_productos"))
 
+        owner = current_user.get_id()
         try:
-            doc = mongo_productos.find_one({"_id": ObjectId(producto_id)})
+            # ✅ solo si es tuyo
+            doc = mongo_productos.find_one({"_id": ObjectId(producto_id), "owner": owner})
         except Exception:
             doc = None
 
         if doc is None:
-            flash("El producto no existe.")
+            flash("No autorizado o el producto no existe.")
             return redirect(url_for("lista_productos"))
 
         if request.method == "POST":
@@ -271,7 +288,7 @@ def editar_producto(producto_id: str):
                 return redirect(url_for("editar_producto", producto_id=producto_id))
 
             mongo_productos.update_one(
-                {"_id": doc["_id"]},
+                {"_id": doc["_id"], "owner": owner},
                 {"$set": {"nombre": nuevo_nombre, "precio": nuevo_precio}},
             )
             flash("Producto actualizado.")
@@ -289,9 +306,25 @@ def editar_producto(producto_id: str):
         )
 
     # ---------- MODO SQL ----------
-    prod = db.session.get(Producto, int(producto_id))
+    try:
+        pid = int(producto_id)
+    except ValueError:
+        flash("ID inválido.")
+        return redirect(url_for("lista_productos"))
+
+    # ✅ solo si es tuyo
+    prod = (
+        db.session.execute(
+            db.select(Producto).where(
+                Producto.id == pid,
+                Producto.user_id == current_user.id,
+                )
+        )
+        .scalar_one_or_none()
+    )
+
     if prod is None:
-        flash("El producto no existe.")
+        flash("No autorizado o el producto no existe.")
         return redirect(url_for("lista_productos"))
 
     if request.method == "POST":
@@ -320,19 +353,41 @@ def eliminar_producto(producto_id: str):
     # ---------- MODO MONGO ----------
     if DB_ENGINE == "mongo":
         if mongo_productos is not None:
+            owner = current_user.get_id()
             try:
-                mongo_productos.delete_one({"_id": ObjectId(producto_id)})
-                flash("Producto eliminado.")
+                res = mongo_productos.delete_one({"_id": ObjectId(producto_id), "owner": owner})
+                if res.deleted_count == 0:
+                    flash("No autorizado o el producto no existe.")
+                else:
+                    flash("Producto eliminado.")
             except Exception:
                 flash("No se pudo eliminar el producto.")
         return redirect(url_for("lista_productos"))
 
     # ---------- MODO SQL ----------
-    prod = db.session.get(Producto, int(producto_id))
-    if prod is not None:
-        db.session.delete(prod)
-        db.session.commit()
-        flash("Producto eliminado.")
+    try:
+        pid = int(producto_id)
+    except ValueError:
+        flash("ID inválido.")
+        return redirect(url_for("lista_productos"))
+
+    prod = (
+        db.session.execute(
+            db.select(Producto).where(
+                Producto.id == pid,
+                Producto.user_id == current_user.id,
+                )
+        )
+        .scalar_one_or_none()
+    )
+
+    if prod is None:
+        flash("No autorizado o el producto no existe.")
+        return redirect(url_for("lista_productos"))
+
+    db.session.delete(prod)
+    db.session.commit()
+    flash("Producto eliminado.")
     return redirect(url_for("lista_productos"))
 
 

@@ -17,12 +17,12 @@ public class GitController {
         this.gitService = gitService;
     }
 
-    // PASO 3 – Comprobar repositorio Git
     @GetMapping("/paso3")
     public ResultadoPaso comprobarPaso3(
+            @RequestParam Long appId,
             @RequestParam String proveedor,
             @RequestParam String repo) {
 
-        return gitService.comprobarRepositorio(proveedor, repo);
+        return gitService.comprobarRepositorio(appId, proveedor, repo);
     }
 }

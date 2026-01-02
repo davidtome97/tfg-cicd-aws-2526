@@ -1,10 +1,10 @@
 # demo-python/models.py
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Float
+from sqlalchemy import Integer, String, Float, ForeignKey
 from flask_login import UserMixin
 
-from config import DB_ENGINE, get_sqlalchemy_uri, get_mongo_client
+from config import DB_NAME, DB_ENGINE, get_sqlalchemy_uri, get_mongo_client
 
 
 # ============================
@@ -45,7 +45,7 @@ def init_databases(app):
 
     # ---------- MONGO ----------
     mongo_client = get_mongo_client() if DB_ENGINE == "mongo" else None
-    mongo_db = mongo_client.get_database("demo") if mongo_client is not None else None
+    mongo_db = mongo_client.get_database(DB_NAME) if mongo_client is not None else None
     mongo_usuarios = mongo_db["usuarios"] if mongo_db is not None else None
     mongo_productos = mongo_db["productos"] if mongo_db is not None else None
 
@@ -63,9 +63,9 @@ class User(UserMixin, db.Model):
     __tablename__ = "usuarios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    correo: Mapped[str] = mapped_column(String(255), unique=True)
-    password: Mapped[str] = mapped_column(String(255))
-    nombre: Mapped[str] = mapped_column(String(255))
+    correo: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)  # ✅
+    password: Mapped[str] = mapped_column(String(255), nullable=False)             # ✅
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)               # ✅
 
 
 class Producto(db.Model):
@@ -76,8 +76,11 @@ class Producto(db.Model):
     __tablename__ = "productos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(100))
-    precio: Mapped[float] = mapped_column(Float)
+    nombre: Mapped[str] = mapped_column(String(100), nullable=False)  # ✅
+    precio: Mapped[float] = mapped_column(Float, nullable=False)      # ✅
+
+    # ✅ dueño (usuario logueado)
+    user_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), nullable=False)
 
 
 # ============================

@@ -167,8 +167,10 @@ public class ZipGeneratorService {
         String nombrePlantilla = dockerComposePlantilla(aplicacion.getTipoBaseDatos());
         if (nombrePlantilla == null) return;
 
+        String defaultPort = (lenguaje == Lenguaje.PYTHON) ? "8082" : "8081";
+
         String appPort = (aplicacion.getPuertoAplicacion() == null || aplicacion.getPuertoAplicacion() <= 0)
-                ? "8081"
+                ? defaultPort
                 : String.valueOf(aplicacion.getPuertoAplicacion());
 
         String baseLang = resourceBase(lenguaje);
