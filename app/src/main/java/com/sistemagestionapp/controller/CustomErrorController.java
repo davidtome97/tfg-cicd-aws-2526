@@ -12,45 +12,56 @@ import org.springframework.web.context.request.WebRequest;
 import java.util.Map;
 
 /**
- * Esta clase se encarga de gestionar los errores que ocurren en la aplicación.
- * He implementado la interfaz {@link ErrorController} para personalizar la forma
- * en que se manejan los errores del sistema.
- * Cuando ocurre un error, capturo la información relevante utilizando
- * {@link ErrorAttributes} y la paso al modelo para que se muestre en la plantilla
- * de error correspondiente.
+ * Controlador encargado de gestionar los errores globales de la aplicación.
  *
- * @author David Tomé Arnáiz
+ * He implementado la interfaz ErrorController para poder personalizar
+ * el tratamiento de errores y evitar mostrar las páginas de error
+ * por defecto de Spring Boot.
+ *
+ * Cuando ocurre cualquier error no controlado (404, 500, etc.),
+ * Spring redirige automáticamente a la ruta "/error", que es gestionada
+ * por este controlador.
  */
 @Controller
 public class CustomErrorController implements ErrorController {
 
     /**
-     * Inyecto el componente que me permite acceder a los detalles del error.
+     * Inyecto el componente ErrorAttributes, que me permite acceder
+     * a la información detallada del error que se ha producido,
+     * como el mensaje, el código de estado o la ruta solicitada.
      */
     @Autowired
     private ErrorAttributes errorAttributes;
 
     /**
-     * Este método se ejecuta automáticamente cuando ocurre un error en la aplicación.
-     * Recopilo los detalles del error desde el {@link WebRequest} y los añado al modelo
-     * para que se muestren en la vista "error.html".
+     * Este método se ejecuta automáticamente cuando se produce
+     * cualquier error en la aplicación.
      *
-     * @param request objeto que representa la solicitud web y contiene la información del error.
-     * @param model objeto que utilizo para enviar datos a la vista.
-     * @return el nombre de la plantilla que muestra los detalles del error.
+     * A partir del objeto WebRequest obtengo los detalles del error
+     * generados por Spring Boot y los añado al modelo para que puedan
+     * mostrarse en una vista personalizada.
+     *
+     * De esta forma puedo ofrecer al usuario una página de error
+     * más clara y controlada, en lugar de la página genérica del framework.
+     *
+     * @param request objeto que representa la petición web y contiene la información del error
+     * @param model objeto que utilizo para enviar los datos a la vista
+     * @return el nombre de la plantilla Thymeleaf que muestra el error
      */
     @RequestMapping("/error")
     public String handleError(WebRequest request, Model model) {
-        // Obtengo los detalles del error usando el objeto 'request'
+
+        // Obtengo los detalles del error a partir del contexto de la petición
+        // Incluyo explícitamente el mensaje del error para poder mostrarlo en la vista
         Map<String, Object> errorDetails = errorAttributes.getErrorAttributes(
                 request,
-                ErrorAttributeOptions.of(ErrorAttributeOptions.Include.MESSAGE) // Incluyo el mensaje del error
+                ErrorAttributeOptions.of(ErrorAttributeOptions.Include.MESSAGE)
         );
 
-        // Paso los detalles del error a la vista para que se muestren
+        // Añado los detalles del error al modelo para que estén disponibles en la plantilla
         model.addAttribute("errorDetails", errorDetails);
 
-        // Devuelvo la plantilla "error.html"
+        // Devuelvo la vista personalizada de error (error.html)
         return "error";
     }
 }

@@ -221,14 +221,35 @@ deploy_ec2:
 
       aws ecr get-login-password --region "$AWS_REGION_IN" \
         | sudo -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
-
-      echo "Liberando puerto APP_PORT=${APP_PORT} si está ocupado..."
-      sudo docker ps --format '{{.ID}} {{.Ports}}' | awk -v p=":${APP_PORT}->" '$0 ~ p {print $1}' | xargs -r sudo docker rm -f || true
-
+      
+      # 1) bajar stack actual
       sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" down --remove-orphans || true
+      
+      # ===============================
+      # LIBERAR PUERTO DEL HOST (APP_PORT)
+      # ===============================
+      PORT_IN_USE="$(sudo ss -ltnp | awk -v p=":${APP_PORT}" '$4 ~ p {print $0}' || true)"
+      if [ -n "${PORT_IN_USE}" ]; then
+        echo " Puerto ${APP_PORT} ya está en uso. Intentando liberar..."
+    
+        # Si lo ocupa Docker, paramos el contenedor
+        CID="$(sudo docker ps --format '{{.ID}} {{.Ports}}' \
+          | awk -v p=":${APP_PORT}->" '$0 ~ p {print $1; exit}' || true)"
+      
+        if [ -n "${CID}" ]; then
+          echo " Parando contenedor que ocupa ${APP_PORT}: ${CID}"
+          sudo docker stop "${CID}" || true
+          sudo docker rm -f "${CID}" || true
+        else
+          echo "No es Docker. Proceso usando el puerto:"
+          sudo lsof -i :"${APP_PORT}" || true
+        fi
+      fi
+      
+      # 2) pull + up
       sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" pull
       sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" up -d --remove-orphans
-
+           
       echo "Estado:"
       sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
       EOF

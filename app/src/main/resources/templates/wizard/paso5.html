@@ -2,12 +2,11 @@
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Paso 5 – Comprobar despliegue en EC2</title>
+    <title>Paso 5 – Configurar Base de Datos</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 
-    <!-- appId disponible en JS -->
     <meta name="appId" th:content="${appId}">
 </head>
 
@@ -33,52 +32,65 @@
 
 <div class="container">
 
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="mb-0">Paso 5 – Comprobar despliegue en EC2</h2>
-        <a href="/manuales/paso_5.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
-    </div>
+    <h2 class="mb-2">Paso 5 – Configurar Base de Datos</h2>
+
     <p class="text-muted">
-        Se comprueba que la aplicación desplegada en una instancia EC2 responde correctamente
-        mediante una petición HTTP.
+        Este paso es de <b>ayuda</b>. Selecciona el modo y el motor y descarga
+        un PDF con las variables que debes crear en <b>GitHub Secrets</b>.
     </p>
 
     <div class="card p-4 shadow-sm">
 
-        <div class="mb-3">
-            <label class="form-label">IP o dominio de EC2</label>
-            <input id="host" class="form-control" placeholder="Ej: 52.48.61.1">
-            <div class="form-text">
-                Puedes poner IP pública o un dominio. No incluyas <code>http://</code> ni <code>https://</code>.
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Modo</label>
+                <select id="mode" class="form-select">
+                    <option value="local" selected>local</option>
+                    <option value="remote">remote</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Motor</label>
+                <select id="engine" class="form-select">
+                    <option value="postgres" selected>PostgreSQL</option>
+                    <option value="mysql">MySQL</option>
+                    <option value="mongo">MongoDB</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Puerto (opcional)</label>
+                <input id="port" class="form-control"
+                       placeholder="5432 / 3306 / 27017">
+                <div class="form-text">
+                    Vacío = puerto por defecto del motor.
+                </div>
             </div>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Puerto</label>
-            <input id="port" class="form-control" value="80">
-        </div>
-
-        <button type="button" onclick="ejecutarPaso5()" class="btn btn-primary">
-            Comprobar
-        </button>
-
-        <div class="mt-3">
-            <button type="button" id="btnDownloadEC2" class="btn btn-outline-secondary">
-                Descargar conf EC2 Terminal
+        <div class="mt-4 d-flex gap-2">
+            <button type="button" class="btn btn-primary" onclick="descargarPdf()">
+                Descargar PDF
             </button>
 
-            <div class="form-text mt-1">
-                Descarga los comandos necesarios para preparar una instancia EC2
-                (Docker, Docker Compose y AWS CLI).
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleAyuda()">
+                Mostrar / Ocultar ayuda
+            </button>
+        </div>
+
+        <div id="ayuda" class="mt-4" style="display:none;">
+            <hr>
+            <div class="alert alert-info mb-0">
+                <b>local</b>: docker-compose levanta la BD dentro de EC2.<br>
+                <b>remote</b>: la BD es externa (RDS / Atlas). Crea la BD antes y
+                añade las credenciales en Secrets.
             </div>
         </div>
-        <!-- 🔼 FIN BLOQUE NUEVO -->
 
         <hr>
 
-        <!-- ESTADO inicial desde BD (controlPaso) -->
+        <!-- ESTADO -->
         <p class="mt-3 fs-5">
             Estado:
             <span id="estado"
@@ -88,17 +100,43 @@
             </span>
         </p>
 
-        <p id="mensaje" class="text-muted mb-0"
-           th:text="${controlPaso != null ? controlPaso.mensaje : ''}"></p>
+        <p id="mensaje"
+           class="text-muted mb-0"
+           th:text="${controlPaso != null
+               ? controlPaso.mensaje
+               : 'Guía: descarga el PDF y crea los secrets.'}">
+        </p>
     </div>
 
-    <div class="mt-3 d-flex justify-content-between">
+    <!-- ⚠️ BLOQUEO -->
+    <div id="alertBloqueo"
+         th:if="${!pasoActualCompleto}"
+         class="alert alert-warning mt-3">
+        Debes completar este paso antes de continuar.
+    </div>
+
+    <!-- NAVEGACIÓN -->
+    <div class="mt-3 d-flex justify-content-between align-items-center">
         <a th:href="@{/wizard/paso4(appId=${appId})}" class="btn btn-link">
             &larr; Volver al paso 4
         </a>
-        <a th:href="@{/wizard/paso6(appId=${appId})}" class="btn btn-link">
-            Ir al paso 6 &rarr;
-        </a>
+
+        <div>
+            <button id="btnPaso6"
+                    class="btn btn-success"
+                    th:disabled="${!pasoActualCompleto}"
+                    th:onclick="${pasoActualCompleto}
+                        ? 'location.href=\'/wizard/paso6?appId=' + ${appId} + '\''
+                        : null">
+                Ir al paso 6 →
+            </button>
+
+            <div id="msgBloqueo"
+                 th:if="${!pasoActualCompleto}"
+                 class="form-text text-danger mt-1">
+                Descarga el PDF para continuar.
+            </div>
+        </div>
     </div>
 
 </div>
@@ -106,103 +144,55 @@
 <script>
     function getAppId() {
         const meta = document.querySelector('meta[name="appId"]');
-        const appId = meta ? meta.getAttribute("content") : null;
-        if (!appId) {
-            alert("Falta appId. Vuelve al listado y entra al asistente desde una aplicación.");
-            throw new Error("appId missing");
-        }
-        return appId;
+        return meta ? meta.getAttribute("content") : "";
     }
 
-    function setEstadoUI(estado, mensaje) {
-        const badge = document.getElementById("estado");
-        const msg = document.getElementById("mensaje");
-
-        badge.innerText = estado || "N/A";
-        msg.innerText = mensaje || "";
-
-        if (estado === "OK") badge.className = "badge bg-success";
-        else if (estado === "KO") badge.className = "badge bg-danger";
-        else badge.className = "badge bg-secondary";
+    function toggleAyuda() {
+        const el = document.getElementById("ayuda");
+        el.style.display = (el.style.display === "none") ? "block" : "none";
     }
 
-    (function pintarEstadoInicial(){
-        const badge = document.getElementById("estado");
-        if (!badge) return;
-        const estado = (badge.textContent || "").trim();
-
-        if (estado === "OK") badge.className = "badge bg-success";
-        else if (estado === "KO") badge.className = "badge bg-danger";
-        else badge.className = "badge bg-secondary";
-    })();
-
-    async function ejecutarPaso5() {
+    function descargarPdf() {
         const appId = getAppId();
-        const host = document.getElementById("host").value || "";
+        const mode = document.getElementById("mode").value;
+        const engine = document.getElementById("engine").value;
         const port = document.getElementById("port").value || "";
 
-        try {
-            setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
+        const url = `/wizard/paso6/pdf?appId=${encodeURIComponent(appId)}`
+            + `&mode=${encodeURIComponent(mode)}`
+            + `&engine=${encodeURIComponent(engine)}`
+            + `&port=${encodeURIComponent(port)}`;
 
-            const url = `/api/wizard/paso5?appId=${encodeURIComponent(appId)}`
-                + `&host=${encodeURIComponent(host)}`
-                + `&port=${encodeURIComponent(port)}`;
+        // 🔽 descarga PDF
+        window.location.href = url;
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("HTTP " + res.status);
+        // ✅ sincronizar UI
+        const btn = document.getElementById("btnPaso6");
+        const msg = document.getElementById("msgBloqueo");
+        const alert = document.getElementById("alertBloqueo");
+        const badge = document.getElementById("estado");
+        const texto = document.getElementById("mensaje");
 
-            const data = await res.json();
-            setEstadoUI(data.estado, data.mensaje);
+        if (btn) {
+            btn.disabled = false;
+            btn.onclick = () =>
+                window.location.href =
+                    `/wizard/paso6?appId=${encodeURIComponent(appId)}`;
+        }
 
-        } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 5.");
+        if (msg) msg.remove();
+        if (alert) alert.remove();
+
+        if (badge) {
+            badge.textContent = "OK";
+            badge.className = "badge bg-success";
+        }
+
+        if (texto) {
+            texto.textContent =
+                "Guía de configuración descargada. Variables listas para usar.";
         }
     }
-
-    /* ===============================
-       DESCARGA CONF EC2 TERMINAL
-       =============================== */
-    document.getElementById("btnDownloadEC2").addEventListener("click", () => {
-        const content = `sudo apt-get update -y
-sudo apt-get install -y docker.io
-
-sudo systemctl enable --now docker
-sudo systemctl status docker --no-pager | head -n 20
-
-sudo usermod -aG docker ubuntu
-
-docker ps
-
-sudo apt-get update -y
-sudo apt-get install -y docker-compose-v2
-docker compose version
-
-sudo rm -rf /home/ubuntu/.docker
-mkdir -p /home/ubuntu/.docker
-chmod 700 /home/ubuntu/.docker
-
-sudo apt-get update -y
-sudo apt-get install -y awscli
-aws --version
-
-aws sts get-caller-identity
-
-sudo mkdir -p /usr/lib/docker/cli-plugins
-sudo ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/lib/docker/cli-plugins/docker-compose
-`;
-
-        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "conf-ec2-terminal.txt";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        URL.revokeObjectURL(url);
-    });
 </script>
 
 </body>

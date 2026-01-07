@@ -254,11 +254,33 @@ jobs:
           
           aws ecr get-login-password --region "$AWS_REGION_IN" \
             | sudo -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
-          
+
+          # 1) bajar stack actual
           sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" down --remove-orphans || true
+
+          # 2) liberar puerto si sigue ocupado
+          PORT_IN_USE="$(sudo ss -ltnp | awk -v p=":${APP_PORT}" '$4 ~ p {print $0}' || true)"
+          if [ -n "${PORT_IN_USE}" ]; then
+            echo "Puerto ${APP_PORT} ya está en uso. Intentando liberar..."
+
+            # si lo ocupa docker (0.0.0.0 o :::), paramos ese contenedor
+            CID="$(sudo docker ps --format '{{.ID}} {{.Ports}}' \
+              | awk -v p=":${APP_PORT}->" '$0 ~ p {print $1; exit}' || true)"
+
+            if [ -n "${CID}" ]; then
+              echo "Parando contenedor que ocupa ${APP_PORT}: ${CID}"
+              sudo docker rm -f "${CID}" || true
+            else
+              echo "No parece ser Docker. Proceso usando el puerto:"
+              sudo lsof -i :"${APP_PORT}" || true
+            fi
+          fi
+
+          # 3) pull + up
           sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" pull
           sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" up -d --remove-orphans
-          
+
           echo "Estado:"
           sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+
           EOF

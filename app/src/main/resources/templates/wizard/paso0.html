@@ -7,7 +7,6 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 
-    <!-- appId disponible en JS si lo necesitas -->
     <meta name="appId" th:content="${appId}">
 </head>
 
@@ -25,7 +24,9 @@
 
 <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-        <a class="navbar-brand" th:href="@{/aplicaciones}">Sistema CI/CD – Paso 0</a>
+        <a class="navbar-brand" th:href="@{/aplicaciones}">
+            Sistema CI/CD – Paso 0
+        </a>
     </div>
 </nav>
 
@@ -34,11 +35,17 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2 class="mb-0">Paso 0 – Inicializar repositorio (primer commit)</h2>
 
-        <!-- PDF que vas a meter en /manuales -->
-        <a href="/manuales/paso_0.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
+        <div class="d-flex gap-2">
+            <a href="/manuales/paso_0.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Manual Git
+            </a>
+
+            <a href="/manuales/paso_0_jenkins.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Manual Jenkins
+            </a>
+        </div>
     </div>
 
     <p class="text-muted">
@@ -46,11 +53,21 @@
         Este paso asegura que existe historial en Git y que el pipeline podrá trabajar sobre una rama principal.
     </p>
 
+    <div class="alert alert-info shadow-sm">
+        <h6 class="mb-2">Opcional: hacerlo desde Jenkins</h6>
+        <ol class="mb-0">
+            <li>Crea un repositorio en GitHub o GitLab y sube el proyecto.</li>
+            <li>Crea un Multibranch Pipeline en Jenkins.</li>
+            <li>Configura credenciales y variables.</li>
+            <li>Ejecuta el pipeline y verifica el despliegue.</li>
+        </ol>
+    </div>
+
     <div class="card p-4 shadow-sm">
 
         <div class="mb-3">
-            <h5 class="mb-2">Comandos sugeridos</h5>
-            <div class="alert alert-secondary mb-0">
+            <h5>Comandos sugeridos</h5>
+            <div class="alert alert-secondary">
 <pre class="mb-0">
 git init
 git add .
@@ -60,35 +77,38 @@ git remote add origin &lt;URL_DEL_REPO&gt;
 git push -u origin main
 </pre>
             </div>
-            <div class="form-text">
-                Si ya tenías repo, asegúrate de que existe al menos un commit en la rama principal (<code>main</code>).
-            </div>
         </div>
 
         <hr>
 
-        <!-- Form para marcar OK (guarda opcionalmente hash del commit) -->
+        <!-- FORM PASO 0 -->
         <form th:action="@{/wizard/paso0/confirmar}" method="post">
             <input type="hidden" name="appId" th:value="${appId}"/>
 
             <div class="mb-3">
-                <label class="form-label" for="commitHash">Hash del commit (opcional)</label>
+                <label for="commitHash" class="form-label">Hash del commit (opcional)</label>
                 <input id="commitHash" name="commitHash" class="form-control"
                        placeholder="Ej: 37e8959a3de9f24dd9751e9f135c8feeb6c036d7">
-                <div class="form-text">
-                    Opcional, pero recomendable para auditoría. Puedes verlo con <code>git log --oneline -1</code>.
-                </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">
-                Ya he hecho el primer commit → Continuar
-            </button>
+            <div class="d-flex gap-2 align-items-center">
+                <button id="btnValidar" type="button" class="btn btn-outline-primary">
+                    Comprobar hash
+                </button>
+
+                <button type="submit" class="btn btn-success">
+                    Marcar como OK
+                </button>
+
+                <span id="spinner"
+                      class="spinner-border spinner-border-sm text-primary d-none"></span>
+            </div>
         </form>
 
         <hr>
 
-        <!-- ESTADO inicial desde BD (controlPaso) -->
-        <p class="mt-3 fs-5">
+        <!-- ESTADO -->
+        <p class="fs-5">
             Estado:
             <span id="estado"
                   class="badge bg-secondary"
@@ -97,28 +117,93 @@ git push -u origin main
             </span>
         </p>
 
-        <p id="mensaje" class="text-muted mb-0"
-           th:text="${controlPaso != null ? controlPaso.mensaje : ''}"></p>
+        <p id="mensaje" class="text-muted"
+           th:text="${controlPaso != null ? controlPaso.mensaje : ''}">
+        </p>
     </div>
 
-    <div class="mt-3 d-flex justify-content-between">
-        <a th:href="@{/aplicaciones}" class="btn btn-link">&larr; Volver al listado</a>
-        <!-- Si quieres forzar el flujo: cuando esté OK, entrarás con el POST; este link es solo por navegación -->
-        <a th:href="@{/wizard/paso1(appId=${appId})}" class="btn btn-link">volver al paso 1 →</a>
+    <!-- ⚠️ MENSAJE BLOQUEO -->
+    <div th:if="${!pasoActualCompleto}" class="alert alert-warning mt-3">
+        Debes completar este paso antes de continuar al siguiente.
+    </div>
+
+    <!-- NAVEGACIÓN -->
+    <div class="mt-3 d-flex justify-content-between align-items-center">
+        <a th:href="@{/aplicaciones}" class="btn btn-link">
+            &larr; Volver al listado
+        </a>
+
+        <div>
+            <button class="btn btn-primary"
+                    th:disabled="${!pasoActualCompleto}"
+                    th:onclick="${pasoActualCompleto}
+                        ? 'location.href=\'/wizard/paso1?appId=' + ${appId} + '\''
+                        : null">
+                Ir al paso 1 →
+            </button>
+
+            <div th:if="${!pasoActualCompleto}"
+                 class="form-text text-danger mt-1">
+                Completa este paso para poder continuar.
+            </div>
+        </div>
     </div>
 
 </div>
 
 <script>
-    // Pintar color al cargar (según lo que venga de BD)
-    (function pintarEstadoInicial(){
+    (function () {
         const badge = document.getElementById("estado");
         if (!badge) return;
-        const estado = (badge.textContent || "").trim();
+        const estado = badge.textContent.trim();
+        badge.className =
+            estado === "OK" ? "badge bg-success" :
+                estado === "KO" ? "badge bg-danger" :
+                    "badge bg-secondary";
+    })();
 
-        if (estado === "OK") badge.className = "badge bg-success";
-        else if (estado === "KO") badge.className = "badge bg-danger";
-        else badge.className = "badge bg-secondary";
+    (function () {
+        const btn = document.getElementById("btnValidar");
+        const spinner = document.getElementById("spinner");
+        const badge = document.getElementById("estado");
+        const msg = document.getElementById("mensaje");
+        const hashInput = document.getElementById("commitHash");
+        const appId = document.querySelector('input[name="appId"]').value;
+
+        const setEstado = (estado, mensaje) => {
+            badge.textContent = estado;
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+            msg.textContent = mensaje || "";
+        };
+
+        btn.addEventListener("click", async () => {
+            const hash = hashInput.value.trim();
+            if (!hash) {
+                setEstado("KO", "Introduce un hash para validar.");
+                return;
+            }
+
+            btn.disabled = true;
+            spinner.classList.remove("d-none");
+
+            try {
+                const res = await fetch("/wizard/paso0/validar", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ appId, commitHash: hash })
+                });
+                const data = await res.json();
+                setEstado(data.estado, data.mensaje);
+            } catch {
+                setEstado("KO", "Error validando el hash.");
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add("d-none");
+            }
+        });
     })();
 </script>
 

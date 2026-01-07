@@ -37,7 +37,7 @@ public class WebSecurityConfig {
                         .usernameParameter("correo")
                         .passwordParameter("password")
 
-                        //  al listado de aplicaciones, no a /usuarios
+                        //  al listado de aplicaciones
                         .defaultSuccessUrl("/aplicaciones", true)
 
                         .failureUrl("/login?error")

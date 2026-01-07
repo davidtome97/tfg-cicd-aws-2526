@@ -13,15 +13,18 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Map;
+import java.net.URI;
+import java.util.*;
 
 @Controller
 @RequestMapping("/wizard")
 public class DeployWizardController {
 
+    // Servicio que utilizo para centralizar toda la lógica del asistente de despliegue.
+    // Aquí delego el guardado del estado de cada paso y sus mensajes.
     private final DeployWizardService deployWizardService;
+
+    // Servicio responsable de generar el PDF con la guía de configuración de base de datos.
     private final Paso6PdfService paso6PdfService;
 
     public DeployWizardController(DeployWizardService deployWizardService,
@@ -30,82 +33,154 @@ public class DeployWizardController {
         this.paso6PdfService = paso6PdfService;
     }
 
-    @GetMapping("/paso1")
-    public String mostrarPaso1(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.SONAR_ANALISIS)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso1";
-    }
+    // Compruebo si el paso anterior al actual está marcado como OK.
+    // Esto me permite forzar que el usuario siga el asistente en orden
+    // y evitar que se salte pasos intermedios.
+    private String bloquearSiPrevioNoOk(Long appId, PasoDespliegue pasoActual) {
+        PasoDespliegue previo = pasoActual.getPasoPrevio();
+        if (previo == null) return null;
 
-    @GetMapping("/paso2")
-    public String mostrarPaso2(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.SONAR_INTEGRACION_GIT)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso2";
-    }
-
-    @GetMapping("/paso3")
-    public String mostrarPaso3(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.REPOSITORIO_GIT)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso3";
-    }
-
-    @GetMapping("/paso4")
-    public String mostrarPaso4(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.IMAGEN_ECR)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso4";
-    }
-
-    @GetMapping("/paso5")
-    public String mostrarPaso5(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.DESPLIEGUE_EC2)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso5";
-    }
-
-    @GetMapping("/paso6")
-    public String mostrarPaso6(@RequestParam Long appId, Model model) {
-        model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.BASE_DATOS)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
-        return "wizard/paso6";
-    }
-
-   /* @GetMapping("/entry")
-    public String entry(@RequestParam Long appId) {
-        boolean paso0Ok = deployWizardService
-                .obtenerControl(appId, PasoDespliegue.PRIMER_COMMIT)
+        boolean previoOk = deployWizardService
+                .obtenerControl(appId, previo)
                 .map(c -> c.getEstado() == EstadoControl.OK)
                 .orElse(false);
 
-        if (paso0Ok) {
-            return "redirect:/wizard/paso1?appId=" + appId;
-        }
-        return "redirect:/wizard/paso0?appId=" + appId;
-    }*/
+        if (previoOk) return null;
 
-    @GetMapping("/paso0")
-    public String mostrarPaso0(@RequestParam Long appId, Model model) {
+        // Si el paso previo no está completado, redirijo automáticamente a ese paso
+        return "redirect:/wizard/" + toPath(previo) + "?appId=" + appId;
+    }
+
+    // Cargo en el modelo los datos comunes que necesitan todas las vistas del asistente:
+    // el appId, el control del paso actual y si el paso está completado o no.
+    private void cargarModeloPaso(Model model, Long appId, PasoDespliegue paso) {
         model.addAttribute("appId", appId);
-        deployWizardService.obtenerControl(appId, PasoDespliegue.PRIMER_COMMIT)
-                .ifPresent(c -> model.addAttribute("controlPaso", c));
+
+        Optional<ControlDespliegue> controlOpt =
+                deployWizardService.obtenerControl(appId, paso);
+
+        controlOpt.ifPresent(c -> model.addAttribute("controlPaso", c));
+
+        boolean pasoActualCompleto =
+                controlOpt.map(c -> c.getEstado() == EstadoControl.OK).orElse(false);
+
+        model.addAttribute("pasoActualCompleto", pasoActualCompleto);
+    }
+
+    // Traduce el enum PasoDespliegue a la ruta real del asistente.
+    // Esto me evita hardcodear rutas por toda la clase.
+    private String toPath(PasoDespliegue paso) {
+        return switch (paso) {
+            case PRIMER_COMMIT -> "paso0";
+            case SONAR_ANALISIS -> "paso1";
+            case SONAR_INTEGRACION_GIT -> "paso2";
+            case REPOSITORIO_GIT -> "paso3";
+            case IMAGEN_ECR -> "paso4";
+            case BASE_DATOS -> "paso5";
+            case DESPLIEGUE_EC2 -> "paso6";
+            default -> "paso0";
+        };
+    }
+
+    // Muestro el paso 0 del asistente, donde el usuario confirma el primer commit del repositorio.
+    @GetMapping("/paso0")
+    public String paso0(@RequestParam Long appId, Model model) {
+        cargarModeloPaso(model, appId, PasoDespliegue.PRIMER_COMMIT);
         return "wizard/paso0";
     }
 
+    // Paso 1: configuración y validación de SonarCloud.
+    // Antes de mostrar la vista compruebo que el paso anterior esté completado.
+    @GetMapping("/paso1")
+    public String paso1(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.SONAR_ANALISIS);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.SONAR_ANALISIS);
+        return "wizard/paso1";
+    }
+
+    // Paso 2: verificación de la integración entre SonarCloud y el repositorio Git.
+    @GetMapping("/paso2")
+    public String paso2(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.SONAR_INTEGRACION_GIT);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.SONAR_INTEGRACION_GIT);
+        return "wizard/paso2";
+    }
+
+    // Paso 3: comprobación de que el repositorio Git existe y tiene commits.
+    @GetMapping("/paso3")
+    public String paso3(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.REPOSITORIO_GIT);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.REPOSITORIO_GIT);
+        return "wizard/paso3";
+    }
+
+    // Paso 4: validación de la imagen Docker en Amazon ECR.
+    @GetMapping("/paso4")
+    public String paso4(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.IMAGEN_ECR);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.IMAGEN_ECR);
+        return "wizard/paso4";
+    }
+
+    // Paso 5: configuración de la base de datos (local o remota).
+    @GetMapping("/paso5")
+    public String paso5(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.BASE_DATOS);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.BASE_DATOS);
+        return "wizard/paso5";
+    }
+
+    // Paso 6: comprobación final del despliegue en EC2.
+    @GetMapping("/paso6")
+    public String paso6(@RequestParam Long appId, Model model) {
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.DESPLIEGUE_EC2);
+        if (redir != null) return redir;
+
+        cargarModeloPaso(model, appId, PasoDespliegue.DESPLIEGUE_EC2);
+        return "wizard/paso6";
+    }
+
+    // Valido únicamente el formato del hash del commit.
+    // No compruebo si existe realmente en Git porque este paso es de ayuda al usuario.
+    @PostMapping(value = "/paso0/validar",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public Map<String, String> validarPaso0(@RequestParam String commitHash) {
+
+        Map<String, String> out = new HashMap<>();
+        String hash = commitHash == null ? "" : commitHash.trim();
+
+        if (!hash.matches("^[0-9a-fA-F]{7,40}$")) {
+            out.put("estado", "KO");
+            out.put("mensaje", "Hash inválido (7–40 caracteres hexadecimales).");
+            return out;
+        }
+
+        out.put("estado", "OK");
+        out.put("mensaje", "Formato de hash correcto.");
+        return out;
+    }
+
+    // Confirmo el paso 0 y lo marco como completado en la base de datos.
+    // A partir de aquí el usuario puede avanzar al siguiente paso del asistente.
     @PostMapping("/paso0/confirmar")
     public String confirmarPaso0(@RequestParam Long appId,
-                                 @RequestParam(value = "commitHash", required = false) String commitHash) {
+                                 @RequestParam(required = false) String commitHash) {
 
-        String msg = "Primer commit realizado y repositorio inicializado.";
+        String msg = "Repositorio inicializado y primer commit realizado.";
         if (commitHash != null && !commitHash.isBlank()) {
-            msg = "Primer commit realizado. Hash: " + commitHash.trim();
+            msg += " Hash: " + commitHash.trim();
         }
 
         deployWizardService.marcarPaso(
@@ -118,77 +193,65 @@ public class DeployWizardController {
         return "redirect:/wizard/paso1?appId=" + appId;
     }
 
-
-    /**
-     * ✅ Descarga PDF Paso 6 + marca el paso como OK.
-     * URL ejemplo:
-     * /wizard/paso6/pdf?appId=1&mode=local&engine=postgres&port=5432
-     */
+    // Genero el PDF con la guía de configuración de base de datos y,
+    // al descargarlo, marco automáticamente el paso como completado.
     @GetMapping(value = "/paso6/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> descargarPdfPaso6(
-            @RequestParam("appId") Long appId,
-            @RequestParam("mode") String mode,
-            @RequestParam("engine") String engine,
-            @RequestParam(value = "port", required = false) Integer port
+    public ResponseEntity<byte[]> descargarPdfPasoBaseDatos(
+            @RequestParam Long appId,
+            @RequestParam String mode,
+            @RequestParam String engine,
+            @RequestParam(required = false) Integer port
     ) {
-        // 1) Normalizar inputs (evita "PostgreSQL", " postgres ", null, etc.)
-        String safeMode = (mode == null || mode.isBlank()) ? "local" : mode.trim().toLowerCase();
-        String safeEngine = (engine == null || engine.isBlank()) ? "postgres" : engine.trim().toLowerCase();
-
-        // 2) Generar PDF con valores ya normalizados
-        byte[] pdf = paso6PdfService.generarPdf(appId, safeMode, safeEngine, port);
-
-        // 3) Si el PDF no se generó bien, NO marcar OK
-        if (pdf == null || pdf.length == 0) {
-            deployWizardService.marcarPaso(
-                    appId,
-                    PasoDespliegue.BASE_DATOS,
-                    EstadoControl.PENDIENTE,
-                    "No se pudo generar el PDF de configuración de base de datos."
-            );
-            return ResponseEntity.internalServerError().build();
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.BASE_DATOS);
+        if (redir != null) {
+            return ResponseEntity.status(302)
+                    .location(URI.create(redir.replace("redirect:", "")))
+                    .build();
         }
 
-        // 4) Marcar Paso 6 en OK al descargar (guía completada)
+        byte[] pdf = paso6PdfService.generarPdf(appId, mode, engine, port);
+
         deployWizardService.marcarPaso(
                 appId,
                 PasoDespliegue.BASE_DATOS,
                 EstadoControl.OK,
-                "Guía de configuración de base de datos descargada (PDF)."
+                "Guía de base de datos descargada (PDF)."
         );
 
-        // 5) Nombre de fichero consistente
-        String filename = "paso6-bbdd-" + safeEngine + "-" + safeMode + ".pdf";
-
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDisposition(
-                ContentDisposition.attachment().filename(filename).build()
+                ContentDisposition.attachment()
+                        .filename("bbdd-" + engine + "-" + mode + ".pdf")
+                        .build()
         );
 
         return ResponseEntity.ok()
                 .headers(headers)
+                .contentType(MediaType.APPLICATION_PDF)
                 .body(pdf);
     }
 
+    // Muestro un resumen final con el estado y el mensaje de todos los pasos del asistente.
     @GetMapping("/resumen")
-    public String mostrarResumen(@RequestParam Long appId, Model model) {
-        List<ControlDespliegue> controles = deployWizardService.obtenerControlesOrdenados(appId);
+    public String resumen(@RequestParam Long appId, Model model) {
+
+        String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.DESPLIEGUE_EC2);
+        if (redir != null) return redir;
+
+        List<ControlDespliegue> controles =
+                deployWizardService.obtenerControlesOrdenados(appId);
 
         Map<PasoDespliegue, ControlDespliegue> porPaso = new EnumMap<>(PasoDespliegue.class);
-        for (ControlDespliegue c : controles) {
-            if (c.getPaso() != null) porPaso.put(c.getPaso(), c);
-        }
+        controles.forEach(c -> porPaso.put(c.getPaso(), c));
 
         List<PasoView> pasos = List.of(
-                PasoView.of(0, "Primer commit (repositorio)", porPaso.get(PasoDespliegue.PRIMER_COMMIT)),
+                PasoView.of(0, "Primer commit", porPaso.get(PasoDespliegue.PRIMER_COMMIT)),
                 PasoView.of(1, "SonarCloud", porPaso.get(PasoDespliegue.SONAR_ANALISIS)),
                 PasoView.of(2, "Integración Sonar ↔ Git", porPaso.get(PasoDespliegue.SONAR_INTEGRACION_GIT)),
                 PasoView.of(3, "Repositorio Git", porPaso.get(PasoDespliegue.REPOSITORIO_GIT)),
                 PasoView.of(4, "Imagen Docker en ECR", porPaso.get(PasoDespliegue.IMAGEN_ECR)),
-                PasoView.of(5, "Despliegue en EC2", porPaso.get(PasoDespliegue.DESPLIEGUE_EC2)),
-                PasoView.of(6, "Base de datos", porPaso.get(PasoDespliegue.BASE_DATOS)),
-                PasoView.of(7, "Resumen final", porPaso.get(PasoDespliegue.RESUMEN_FINAL))
+                PasoView.of(5, "Base de datos", porPaso.get(PasoDespliegue.BASE_DATOS)),
+                PasoView.of(6, "Despliegue en EC2", porPaso.get(PasoDespliegue.DESPLIEGUE_EC2))
         );
 
         model.addAttribute("appId", appId);
@@ -196,7 +259,8 @@ public class DeployWizardController {
         return "wizard/resumen";
     }
 
-    /** DTO simple para la vista */
+    // DTO interno que utilizo únicamente para pasar la información
+    // de cada paso a la vista de resumen.
     public static class PasoView {
         private final int numero;
         private final String titulo;
@@ -211,10 +275,15 @@ public class DeployWizardController {
         }
 
         public static PasoView of(int numero, String titulo, ControlDespliegue c) {
-            if (c == null) return new PasoView(numero, titulo, "N/A", "Este paso no se ha ejecutado todavía.");
-            String est = (c.getEstado() != null) ? c.getEstado().name() : "N/A";
-            String msg = (c.getMensaje() != null && !c.getMensaje().isBlank()) ? c.getMensaje() : "";
-            return new PasoView(numero, titulo, est, msg);
+            if (c == null) {
+                return new PasoView(numero, titulo, "N/A", "Paso no ejecutado.");
+            }
+            return new PasoView(
+                    numero,
+                    titulo,
+                    c.getEstado().name(),
+                    c.getMensaje()
+            );
         }
 
         public int getNumero() { return numero; }

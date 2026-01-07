@@ -14,13 +14,25 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * En este servicio centralizo la lógica principal del asistente de despliegue.
+ * Me encargo de gestionar los pasos, su estado y de decidir cuándo el proceso
+ * completo puede darse por finalizado correctamente.
+ */
 @Service
 public class DeployWizardService {
 
+    // Repositorio de aplicaciones para obtener la app asociada a cada asistente
     private final AplicacionRepository aplicacionRepository;
+
+    // Repositorio que utilizo para guardar y consultar el estado de cada paso
     private final ControlDespliegueRepository controlDespliegueRepository;
 
-    // Los 6 pasos “reales” (sin incluir RESUMEN_FINAL)
+    /**
+     * Defino aquí los pasos “reales” del asistente.
+     * Excluyo el RESUMEN_FINAL porque no es un paso que el usuario ejecute,
+     * sino un estado calculado automáticamente.
+     */
     private static final EnumSet<PasoDespliegue> PASOS_REALES = EnumSet.of(
             PasoDespliegue.SONAR_ANALISIS,
             PasoDespliegue.SONAR_INTEGRACION_GIT,
@@ -36,11 +48,20 @@ public class DeployWizardService {
         this.controlDespliegueRepository = controlDespliegueRepository;
     }
 
+    /**
+     * Obtengo todos los controles de una aplicación ordenados por paso.
+     * Este método lo utilizo para mostrar el resumen del asistente.
+     */
     @Transactional(readOnly = true)
     public List<ControlDespliegue> obtenerControlesOrdenados(Long aplicacionId) {
         return controlDespliegueRepository.findByAplicacionIdOrderByPasoAsc(aplicacionId);
     }
 
+    /**
+     * Marco un paso concreto con el estado indicado (OK, KO o PENDIENTE).
+     * Si el control no existe aún, lo creo.
+     * Cada vez que se marca un paso, compruebo si el resumen final debe actualizarse.
+     */
     @Transactional
     public void marcarPaso(Long aplicacionId, PasoDespliegue paso, EstadoControl estado, String mensaje) {
         Aplicacion app = aplicacionRepository.findById(aplicacionId)
@@ -62,26 +83,43 @@ public class DeployWizardService {
 
         controlDespliegueRepository.save(control);
 
-        // ✅ auto-marca RESUMEN_FINAL cuando proceda
+        // Tras marcar un paso, compruebo si ya se puede dar por completado el resumen final
         actualizarResumenFinalSiProcede(aplicacionId);
     }
 
+    /**
+     * Obtengo el control de un paso concreto de una aplicación.
+     * Este método lo utilizo principalmente desde los controladores del asistente.
+     */
     @Transactional(readOnly = true)
-    public java.util.Optional<ControlDespliegue> obtenerControl(Long aplicacionId, PasoDespliegue paso) {
+    public Optional<ControlDespliegue> obtenerControl(Long aplicacionId, PasoDespliegue paso) {
         return controlDespliegueRepository.findByAplicacionIdAndPaso(aplicacionId, paso);
     }
 
+    /**
+     * Cuento cuántos pasos están en estado OK para una aplicación.
+     * Me sirve para calcular el progreso global del asistente.
+     */
     @Transactional(readOnly = true)
     public long contarPasosOk(Long aplicacionId) {
         return controlDespliegueRepository.countByAplicacionIdAndEstado(aplicacionId, EstadoControl.OK);
     }
 
+    /**
+     * Devuelvo el número total de pasos definidos en el enum.
+     * Este valor se utiliza para calcular porcentajes de progreso.
+     */
     public int totalPasos() {
-        return PasoDespliegue.values().length; // 6
+        return PasoDespliegue.values().length;
     }
 
+    /**
+     * Compruebo si todos los pasos reales del asistente están en estado OK.
+     * Si es así, marco automáticamente el paso RESUMEN_FINAL como OK.
+     * Este proceso es idempotente, por lo que puede ejecutarse varias veces sin efectos secundarios.
+     */
     private void actualizarResumenFinalSiProcede(Long aplicacionId) {
-        // 1) Si alguno de los pasos reales no está OK -> RESUMEN_FINAL = KO/PENDIENTE según prefieras
+
         boolean todosOk = PASOS_REALES.stream().allMatch(p ->
                 controlDespliegueRepository.findByAplicacionIdAndPaso(aplicacionId, p)
                         .map(c -> c.getEstado() == EstadoControl.OK)
@@ -89,7 +127,6 @@ public class DeployWizardService {
         );
 
         if (todosOk) {
-            // Marcar RESUMEN_FINAL como OK (idempotente)
             ControlDespliegue resumen = controlDespliegueRepository
                     .findByAplicacionIdAndPaso(aplicacionId, PasoDespliegue.RESUMEN_FINAL)
                     .orElseGet(() -> {
@@ -107,9 +144,8 @@ public class DeployWizardService {
             resumen.setFechaEjecucion(LocalDateTime.now());
             controlDespliegueRepository.save(resumen);
         } else {
-            // Si no están todos OK, puedes:
-            // A) no tocar RESUMEN_FINAL (lo dejo así por defecto)
-            // B) o marcarlo como PENDIENTE/KO. Si lo quieres, dímelo y lo activamos.
+            // Si no están todos los pasos en OK, no modifico el resumen final.
+            // Podría marcarlo como PENDIENTE o KO, pero para este proyecto lo dejo así.
         }
     }
 }

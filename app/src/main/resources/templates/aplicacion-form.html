@@ -40,16 +40,28 @@
     </div>
 
     <!-- FORM PRINCIPAL -->
-    <form th:action="@{/aplicaciones/guardar}" th:object="${aplicacion}" method="post">
+    <form th:action="@{/aplicaciones/guardar}" th:object="${aplicacion}" method="post" id="appForm" novalidate>
         <input type="hidden" th:field="*{id}"/>
 
         <!-- Datos generales -->
         <div class="card shadow-sm mb-3">
             <div class="card-header bg-white fw-semibold">Datos generales</div>
             <div class="card-body">
+
                 <div class="mb-3">
-                    <label class="form-label">Nombre de la aplicación</label>
-                    <input type="text" class="form-control" th:field="*{nombre}" required>
+                    <label class="form-label">
+                        Nombre de la aplicación <span class="text-danger">*</span>
+                    </label>
+                    <input type="text"
+                           class="form-control"
+                           th:field="*{nombre}"
+                           required
+                           minlength="2"
+                           maxlength="80"
+                           placeholder="ej: demo-java-git">
+                    <div class="invalid-feedback">
+                        El nombre es obligatorio.
+                    </div>
                 </div>
 
                 <div class="mb-3">
@@ -64,6 +76,7 @@
                            th:value="${#temporals.format(aplicacion.fechaCreacion, 'dd/MM/yyyy HH:mm')}"
                            readonly>
                 </div>
+
             </div>
         </div>
 
@@ -73,36 +86,63 @@
             <div class="card-body">
 
                 <div class="mb-3">
-                    <label class="form-label d-block">Tipo de proyecto</label>
+                    <label class="form-label d-block">
+                        Tipo de proyecto <span class="text-danger">*</span>
+                    </label>
+
                     <div class="d-flex flex-wrap gap-3">
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipoProyecto" id="tpConfig" value="config" checked>
+                            <input class="form-check-input"
+                                   type="radio"
+                                   th:field="*{tipoProyecto}"
+                                   th:value="CONFIG"
+                                   id="tpConfig"
+                                   required>
                             <label class="form-check-label" for="tpConfig">Solo configuración</label>
                         </div>
+
                         <div class="form-check">
-                            <input class="form-check-input" type="radio" name="tipoProyecto" id="tpDemo" value="demo">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   th:field="*{tipoProyecto}"
+                                   th:value="DEMO"
+                                   id="tpDemo"
+                                   required>
                             <label class="form-check-label" for="tpDemo">Demo app (opcional)</label>
                         </div>
                     </div>
+
                     <div class="form-text">
                         Configuración: se generan ficheros de CI/CD + Docker adaptados al lenguaje.<br>
                         Demo app: además se incluye una aplicación de ejemplo lista para desplegar.
                     </div>
+
+                    <div class="invalid-feedback d-block" id="tpError" style="display:none;">
+                        Debes seleccionar un tipo de proyecto.
+                    </div>
                 </div>
 
-                <!-- Lenguaje (SIEMPRE visible) -->
+                <!-- Lenguaje -->
                 <div class="mb-0">
-                    <label class="form-label d-block">Lenguaje</label>
-                    <div class="d-flex flex-wrap gap-3">
+                    <label class="form-label d-block">
+                        Lenguaje <span class="text-danger">*</span>
+                    </label>
+
+                    <div class="d-flex flex-wrap gap-3" id="lenguajeGroup">
                         <div class="form-check" th:each="len : ${lenguajes}">
                             <input class="form-check-input"
                                    type="radio"
                                    th:field="*{lenguaje}"
-                                   th:value="${len}">
+                                   th:value="${len}"
+                                   required>
                             <label class="form-check-label"
                                    th:for="${#ids.prev('lenguaje')}"
                                    th:text="${len}">JAVA</label>
                         </div>
+                    </div>
+
+                    <div class="invalid-feedback d-block" id="lengError" style="display:none;">
+                        Debes seleccionar un lenguaje.
                     </div>
                 </div>
 
@@ -128,11 +168,12 @@
                     <div class="col-12">
                         <label class="form-label d-block">Modo de base de datos</label>
                         <div class="d-flex flex-wrap gap-3">
+                            <!-- DbModo enum => LOCAL/REMOTE -->
                             <div class="form-check">
                                 <input class="form-check-input"
                                        type="radio"
                                        th:field="*{dbModo}"
-                                       value="local"
+                                       th:value="LOCAL"
                                        id="dbLocal">
                                 <label class="form-check-label" for="dbLocal">
                                     Local (Docker / misma máquina)
@@ -143,7 +184,7 @@
                                 <input class="form-check-input"
                                        type="radio"
                                        th:field="*{dbModo}"
-                                       value="remote"
+                                       th:value="REMOTE"
                                        id="dbRemote">
                                 <label class="form-check-label" for="dbRemote">
                                     Remota (Cloud / Atlas / RDS)
@@ -178,20 +219,40 @@
                 <div class="row g-3">
 
                     <div class="col-12 col-md-4">
-                        <label class="form-label">Proveedor</label>
-                        <select class="form-select" th:field="*{proveedorCiCd}">
+                        <label class="form-label">
+                            Proveedor <span class="text-danger">*</span>
+                        </label>
+
+                        <select class="form-select" th:field="*{proveedorCiCd}" id="proveedorCiCd" required>
+                            <option value="" disabled
+                                    th:selected="${aplicacion.proveedorCiCd == null}">
+                                -- Selecciona --
+                            </option>
                             <option th:each="prov : ${proveedoresCiCd}"
                                     th:value="${prov}"
                                     th:text="${prov}">
                             </option>
                         </select>
+
+                        <div class="invalid-feedback">
+                            Debes seleccionar un proveedor CI/CD.
+                        </div>
+
+                        <div class="form-text" id="proveedorHelp">
+                            GitHub/GitLab generan pipeline automáticamente. Jenkins genera un <code>Jenkinsfile</code> en el ZIP.
+                        </div>
                     </div>
 
                     <div class="col-12 col-md-8">
-                        <label class="form-label">Repositorio Git</label>
-                        <input type="text" class="form-control"
+                        <label class="form-label" id="repoLabel">Repositorio Git</label>
+                        <input type="text"
+                               class="form-control"
                                th:field="*{repositorioGit}"
+                               id="repositorioGit"
                                placeholder="https://github.com/usuario/proyecto.git">
+                        <div class="form-text" id="repoHelp">
+                            URL del repositorio donde se ejecutará el pipeline.
+                        </div>
                     </div>
 
                     <div class="col-12">
@@ -214,8 +275,10 @@
                         <input type="number"
                                class="form-control"
                                th:field="*{puertoAplicacion}"
-                               th:placeholder="'ej: 8081'"
-                               th:value="${aplicacion.puertoAplicacion != null ? aplicacion.puertoAplicacion : 8081}">
+                               placeholder="ej: 8081">
+                        <div class="form-text">
+                            Si no se especifica, se usará el puerto por defecto del proyecto.
+                        </div>
                     </div>
 
                     <div class="col-12 col-md-8">
@@ -251,31 +314,75 @@
 </div>
 
 <script>
-    function syncHiddenValues() {
-        const ecrInput = document.getElementById('ecrRepository');
-        const ecrHidden = document.getElementById('ecrRepoHidden');
+    function aplicarUIProveedor() {
+        const select = document.getElementById('proveedorCiCd');
+        const repoLabel = document.getElementById('repoLabel');
+        const repoInput = document.getElementById('repositorioGit');
+        const repoHelp  = document.getElementById('repoHelp');
+        const provHelp  = document.getElementById('proveedorHelp');
 
-        const dbRemote = document.getElementById('dbRemote');
-        const dbModoHidden = document.getElementById('dbModoHidden');
+        if (!select || !repoLabel || !repoInput) return;
 
-        if (ecrInput && ecrHidden) {
-            ecrHidden.value = (ecrInput.value || '').trim();
-        }
-        if (dbModoHidden) {
-            dbModoHidden.value = (dbRemote && dbRemote.checked) ? 'remote' : 'local';
+        const prov = (select.value || '').toUpperCase();
+
+        if (prov === 'JENKINS') {
+            repoLabel.textContent = 'Repositorio (URL Git) para Jenkins';
+            repoInput.placeholder = 'https://gitlab.com/grupo/proyecto.git o https://github.com/usuario/proyecto.git';
+            repoHelp.textContent  = 'Jenkins hará checkout de este repositorio para ejecutar el Jenkinsfile.';
+            provHelp.innerHTML    = 'Jenkins generará un <code>Jenkinsfile</code> en la raíz del ZIP.';
+        } else if (prov === 'GITLAB') {
+            repoLabel.textContent = 'Repositorio Git (GitLab)';
+            repoInput.placeholder = 'https://gitlab.com/grupo/proyecto.git';
+            repoHelp.textContent  = 'URL del repositorio donde se ejecutará el .gitlab-ci.yml.';
+            provHelp.innerHTML    = 'GitLab generará un <code>.gitlab-ci.yml</code> en el ZIP.';
+        } else {
+            repoLabel.textContent = 'Repositorio Git (GitHub)';
+            repoInput.placeholder = 'https://github.com/usuario/proyecto.git';
+            repoHelp.textContent  = 'URL del repositorio donde se ejecutará el workflow de GitHub Actions.';
+            provHelp.innerHTML    = 'GitHub generará un workflow en <code>.github/workflows/</code>.';
         }
     }
 
+    // Validación client-side bonita (Bootstrap)
+    function validarRadios(name) {
+        const nodes = document.querySelectorAll(`input[name="${name}"]`);
+        return Array.from(nodes).some(n => n.checked);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        syncHiddenValues();
+        aplicarUIProveedor();
+        const select = document.getElementById('proveedorCiCd');
+        if (select) select.addEventListener('change', aplicarUIProveedor);
 
-        const ecrInput = document.getElementById('ecrRepository');
-        const dbLocal = document.getElementById('dbLocal');
-        const dbRemote = document.getElementById('dbRemote');
+        const form = document.getElementById('appForm');
 
-        if (ecrInput) ecrInput.addEventListener('input', syncHiddenValues);
-        if (dbLocal) dbLocal.addEventListener('change', syncHiddenValues);
-        if (dbRemote) dbRemote.addEventListener('change', syncHiddenValues);
+        form.addEventListener('submit', (e) => {
+            // Reseteo mensajes custom
+            const tpError = document.getElementById('tpError');
+            const lengError = document.getElementById('lengError');
+            tpError.style.display = 'none';
+            lengError.style.display = 'none';
+
+            let okCustom = true;
+
+            // radios tipoProyecto y lenguaje (por ser radios en grupo)
+            if (!validarRadios('tipoProyecto')) {
+                tpError.style.display = 'block';
+                okCustom = false;
+            }
+            if (!validarRadios('lenguaje')) {
+                lengError.style.display = 'block';
+                okCustom = false;
+            }
+
+            // Validación HTML5
+            if (!form.checkValidity() || !okCustom) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            form.classList.add('was-validated');
+        });
     });
 </script>
 
