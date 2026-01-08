@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Resumen del asistente CI/CD</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="btn btn-outline-danger">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/aplicaciones}">
+            Sistema CI/CD – Resumen
+        </a>
+    </div>
+</nav>
+
+<div class="container">
+
+    <h2 class="mb-3">Resumen de comprobaciones</h2>
+
+    <p class="text-muted">
+        Este resumen recoge los resultados obtenidos en cada paso del asistente.
+        Si algún paso aparece en rojo (<span class="badge bg-danger">KO</span>),
+        puedes volver atrás para revisarlo.
+    </p>
+
+    <div class="mb-3">
+        <button class="btn btn-secondary" type="button"
+                onclick="exportarPdfDesdeDom()">
+            📄 Exportar resumen en PDF
+        </button>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div class="card p-4 shadow-sm mb-4">
+        <h4 class="mb-3">Resultados</h4>
+
+        <ul class="list-group" id="listaPasos">
+            <li class="list-group-item"
+                th:each="p : ${pasos}"
+                th:attr="data-numero=${p.numero},data-estado=${p.estado}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong th:text="${'Paso ' + p.numero + ' – ' + p.titulo}">
+                        Paso X
+                    </strong>
+
+                    <span class="badge"
+                          th:text="${p.estado}"
+                          th:classappend="${p.estado == 'OK'} ? ' bg-success'
+                              : (${p.estado == 'KO'} ? ' bg-danger' : ' bg-secondary')">
+                        N/A
+                    </span>
+                </div>
+
+                <small class="text-muted" th:text="${p.mensaje}"></small>
+            </li>
+        </ul>
+    </div>
+
+    <!-- INTERPRETACIÓN -->
+    <div class="card p-4 shadow-sm">
+        <h4 class="mb-3">Interpretación del resultado</h4>
+
+        <ul class="mb-2">
+            <li><span id="interp0">Paso 0 → pendiente…</span></li>
+            <li><span id="interp12">Pasos 1 y 2 → pendiente…</span></li>
+            <li><span id="interp3">Paso 3 → pendiente…</span></li>
+            <li><span id="interp4">Paso 4 → pendiente…</span></li>
+            <li><span id="interp5">Paso 5 → pendiente…</span></li>
+            <li><span id="interp6">Paso 6 → pendiente…</span></li>
+        </ul>
+
+        <p class="text-muted mb-0">
+            Si algún paso está en KO, vuelve atrás y corrige la configuración correspondiente.
+        </p>
+    </div>
+
+    <!-- NAVEGACIÓN -->
+    <div class="mt-3 d-flex justify-content-between">
+        <a th:href="@{/wizard/paso6(appId=${appId})}"
+           class="btn btn-link">
+            &larr; Volver al paso 6
+        </a>
+
+        <a th:href="@{/aplicaciones}"
+           class="btn btn-primary">
+            Volver al listado
+        </a>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+<script>
+    function estadoPaso(n) {
+        const li = document.querySelector(
+            `#listaPasos li[data-numero="${n}"]`
+        );
+        return (li?.getAttribute("data-estado") || "N/A").trim();
+    }
+
+    function pintarInterpretacion() {
+        const p0 = estadoPaso(0);
+        const p1 = estadoPaso(1);
+        const p2 = estadoPaso(2);
+        const p3 = estadoPaso(3);
+        const p4 = estadoPaso(4);
+        const p5 = estadoPaso(5);
+        const p6 = estadoPaso(6);
+
+        const i0  = document.getElementById("interp0");
+        const i12 = document.getElementById("interp12");
+        const i3  = document.getElementById("interp3");
+        const i4  = document.getElementById("interp4");
+        const i5  = document.getElementById("interp5");
+        const i6  = document.getElementById("interp6");
+
+        // Paso 0
+        i0.textContent =
+            p0 === "OK" ? "Paso 0 OK → Repositorio inicializado y primer commit realizado."
+                : p0 === "KO" ? "Paso 0 KO → No se ha podido verificar el primer commit."
+                    : "Paso 0 aún no se ha ejecutado.";
+
+        // Pasos 1 y 2
+        i12.textContent =
+            (p1 === "OK" && p2 === "OK")
+                ? "Pasos 1 y 2 OK → Integración Git ↔ SonarCloud correcta."
+                : (p1 === "KO" || p2 === "KO")
+                    ? "Pasos 1 y/o 2 KO → Token, ProjectKey o análisis incorrectos."
+                    : "Pasos 1 y 2 aún no se han ejecutado.";
+
+        // Paso 3
+        i3.textContent =
+            p3 === "OK" ? "Paso 3 OK → Repositorio Git accesible."
+                : p3 === "KO" ? "Paso 3 KO → El repositorio no existe o no tiene commits."
+                    : "Paso 3 aún no se ha ejecutado.";
+
+        // Paso 4
+        i4.textContent =
+            p4 === "OK" ? "Paso 4 OK → Imagen Docker encontrada en ECR."
+                : p4 === "KO" ? "Paso 4 KO → No se encontró la imagen Docker en ECR."
+                    : "Paso 4 aún no se ha ejecutado.";
+
+        // Paso 5
+        i5.textContent =
+            p5 === "OK" ? "Paso 5 OK → Aplicación responde correctamente en EC2."
+                : p5 === "KO" ? "Paso 5 KO → EC2 no responde (IP, puerto o despliegue)."
+                    : "Paso 5 aún no se ha ejecutado.";
+
+        // Paso 6
+        i6.textContent =
+            p6 === "OK" ? "Paso 6 OK → Guía de base de datos completada."
+                : p6 === "KO" ? "Paso 6 KO → Error generando o usando la guía de BD."
+                    : "Paso 6 aún no se ha ejecutado.";
+    }
+
+    document.addEventListener("DOMContentLoaded", pintarInterpretacion);
+
+    async function exportarPdfDesdeDom() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        const items = Array.from(
+            document.querySelectorAll("#listaPasos .list-group-item")
+        );
+
+        let y = 20;
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text("Informe de comprobaciones CI/CD", 14, y);
+        y += 10;
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        doc.text("Fecha: " + new Date().toLocaleString(), 14, y);
+        y += 12;
+
+        items.forEach(li => {
+            if (y > 260) { doc.addPage(); y = 20; }
+
+            const titulo = li.querySelector("strong")?.textContent || "Paso";
+            const estado = li.querySelector(".badge")?.textContent || "N/A";
+            const mensaje = li.querySelector("small")?.textContent || "Sin mensaje.";
+
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(13);
+            doc.text(titulo, 14, y);
+            y += 6;
+
+            doc.setFont("helvetica", "normal");
+            doc.text("Estado: " + estado, 14, y);
+            y += 5;
+
+            const lines = doc.splitTextToSize(mensaje, 180);
+            doc.text(lines, 14, y);
+            y += lines.length * 5 + 6;
+        });
+
+        doc.save("resumen_cicd.pdf");
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Paso 5 – Configurar Base de Datos</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <meta name="appId" th:content="${appId}">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="btn btn-outline-danger">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/aplicaciones}">
+            Sistema CI/CD – Paso 5
+        </a>
+    </div>
+</nav>
+
+<div class="container">
+
+    <h2 class="mb-2">Paso 5 – Configurar Base de Datos</h2>
+
+    <p class="text-muted">
+        Este paso es de <b>ayuda</b>. Selecciona el modo y el motor y descarga
+        un PDF con las variables que debes crear en <b>GitHub Secrets</b>.
+    </p>
+
+    <div class="card p-4 shadow-sm">
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Modo</label>
+                <select id="mode" class="form-select">
+                    <option value="local" selected>local</option>
+                    <option value="remote">remote</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Motor</label>
+                <select id="engine" class="form-select">
+                    <option value="postgres" selected>PostgreSQL</option>
+                    <option value="mysql">MySQL</option>
+                    <option value="mongo">MongoDB</option>
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Puerto (opcional)</label>
+                <input id="port" class="form-control"
+                       placeholder="5432 / 3306 / 27017">
+                <div class="form-text">
+                    Vacío = puerto por defecto del motor.
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4 d-flex gap-2">
+            <button type="button" class="btn btn-primary" onclick="descargarPdf()">
+                Descargar PDF
+            </button>
+
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleAyuda()">
+                Mostrar / Ocultar ayuda
+            </button>
+        </div>
+
+        <div id="ayuda" class="mt-4" style="display:none;">
+            <hr>
+            <div class="alert alert-info mb-0">
+                <b>local</b>: docker-compose levanta la BD dentro de EC2.<br>
+                <b>remote</b>: la BD es externa (RDS / Atlas). Crea la BD antes y
+                añade las credenciales en Secrets.
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- ESTADO -->
+        <p class="mt-3 fs-5">
+            Estado:
+            <span id="estado"
+                  class="badge bg-secondary"
+                  th:text="${controlPaso != null ? controlPaso.estado : 'PENDIENTE'}">
+                PENDIENTE
+            </span>
+        </p>
+
+        <p id="mensaje"
+           class="text-muted mb-0"
+           th:text="${controlPaso != null
+               ? controlPaso.mensaje
+               : 'Guía: descarga el PDF y crea los secrets.'}">
+        </p>
+    </div>
+
+    <!-- ⚠️ BLOQUEO -->
+    <div id="alertBloqueo"
+         th:if="${!pasoActualCompleto}"
+         class="alert alert-warning mt-3">
+        Debes completar este paso antes de continuar.
+    </div>
+
+    <!-- NAVEGACIÓN -->
+    <div class="mt-3 d-flex justify-content-between align-items-center">
+        <a th:href="@{/wizard/paso4(appId=${appId})}" class="btn btn-link">
+            &larr; Volver al paso 4
+        </a>
+
+        <div>
+            <button id="btnPaso6"
+                    class="btn btn-success"
+                    th:disabled="${!pasoActualCompleto}"
+                    th:onclick="${pasoActualCompleto}
+                        ? 'location.href=\'/wizard/paso6?appId=' + ${appId} + '\''
+                        : null">
+                Ir al paso 6 →
+            </button>
+
+            <div id="msgBloqueo"
+                 th:if="${!pasoActualCompleto}"
+                 class="form-text text-danger mt-1">
+                Descarga el PDF para continuar.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    function getAppId() {
+        const meta = document.querySelector('meta[name="appId"]');
+        return meta ? meta.getAttribute("content") : "";
+    }
+
+    function toggleAyuda() {
+        const el = document.getElementById("ayuda");
+        el.style.display = (el.style.display === "none") ? "block" : "none";
+    }
+
+    function descargarPdf() {
+        const appId = getAppId();
+        const mode = document.getElementById("mode").value;
+        const engine = document.getElementById("engine").value;
+        const port = document.getElementById("port").value || "";
+
+        const url = `/wizard/paso6/pdf?appId=${encodeURIComponent(appId)}`
+            + `&mode=${encodeURIComponent(mode)}`
+            + `&engine=${encodeURIComponent(engine)}`
+            + `&port=${encodeURIComponent(port)}`;
+
+        // 🔽 descarga PDF
+        window.location.href = url;
+
+        // ✅ sincronizar UI
+        const btn = document.getElementById("btnPaso6");
+        const msg = document.getElementById("msgBloqueo");
+        const alert = document.getElementById("alertBloqueo");
+        const badge = document.getElementById("estado");
+        const texto = document.getElementById("mensaje");
+
+        if (btn) {
+            btn.disabled = false;
+            btn.onclick = () =>
+                window.location.href =
+                    `/wizard/paso6?appId=${encodeURIComponent(appId)}`;
+        }
+
+        if (msg) msg.remove();
+        if (alert) alert.remove();
+
+        if (badge) {
+            badge.textContent = "OK";
+            badge.className = "badge bg-success";
+        }
+
+        if (texto) {
+            texto.textContent =
+                "Guía de configuración descargada. Variables listas para usar.";
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -18,6 +18,8 @@ public class Aplicacion {
     @Enumerated(EnumType.STRING)
     private Lenguaje lenguaje;
 
+
+
     @Enumerated(EnumType.STRING)
     private ProveedorCiCd proveedorCiCd;
 
@@ -40,6 +42,14 @@ public class Aplicacion {
     @JoinColumn(name = "usuario_id")
     private Usuario propietario;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "db_modo")
+    private DbModo dbModo = DbModo.LOCAL;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "tipo_proyecto")
+    private TipoProyecto tipoProyecto = TipoProyecto.CONFIG;
+
     @OneToMany(mappedBy = "aplicacion", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ControlDespliegue> controles = new ArrayList<>();
 
@@ -53,6 +63,12 @@ public class Aplicacion {
     }
 
     // --- Getters y setters ---
+
+    public DbModo getDbModo() { return dbModo; }
+    public void setDbModo(DbModo dbModo) { this.dbModo = dbModo; }
+
+    public TipoProyecto getTipoProyecto() { return tipoProyecto; }
+    public void setTipoProyecto(TipoProyecto tipoProyecto) { this.tipoProyecto = tipoProyecto; }
 
     public Long getId() {
         return id;

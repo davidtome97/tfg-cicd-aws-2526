@@ -1,4 +1,20 @@
-flask
-flask-login
-flask_sqlalchemy
+Flask
+Flask_SQLAlchemy
+Flask_Login
+
+# DB drivers
+pymysql
+psycopg2-binary
+pymongo
+pymongo[srv]
+
+# Security / utils
 werkzeug
+cryptography
+
+# Production server
+gunicorn
+
+# Optional (tests / local)
+# pytest
+# python-dotenv
