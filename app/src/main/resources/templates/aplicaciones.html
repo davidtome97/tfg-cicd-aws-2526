@@ -1,12 +1,5 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
-<div class="d-flex justify-content-end mb-3">
-    <form th:action="@{/logout}" method="post">
-        <button type="submit" class="btn btn-outline-danger">
-            Cerrar sesión
-        </button>
-    </form>
-</div>
 <head>
     <meta charset="UTF-8">
     <title>Listado de aplicaciones</title>
@@ -16,15 +9,28 @@
 
 <body class="container mt-5">
 
+<!-- LOGOUT -->
+<div class="d-flex justify-content-end mb-3">
+    <form th:action="@{/logout}" method="post">
+        <button type="submit" class="btn btn-outline-danger">
+            Cerrar sesión
+        </button>
+    </form>
+</div>
+
 <h2 class="mb-4">Listado de aplicaciones</h2>
 
 <div class="mb-3 d-flex gap-2">
-    <a th:href="@{/aplicaciones/nueva}" class="btn btn-success">Nueva aplicación</a>
-    <a th:href="@{/ayuda}" class="btn btn-outline-secondary">Ayuda / Manuales</a>
+    <a th:href="@{/aplicaciones/nueva}" class="btn btn-success">
+        Nueva aplicación
+    </a>
+    <a th:href="@{/ayuda}" class="btn btn-outline-secondary">
+        Ayuda / Manuales
+    </a>
 </div>
 
-<table class="table table-bordered table-striped">
-    <thead>
+<table class="table table-bordered table-striped align-middle">
+    <thead class="table-dark">
     <tr>
         <th>Nombre</th>
         <th>Lenguaje</th>
@@ -38,68 +44,75 @@
     </thead>
 
     <tbody>
+
+    <!-- SIN APLICACIONES -->
     <tr th:if="${#lists.isEmpty(aplicaciones)}">
-        <td colspan="8" class="text-center">
+        <td colspan="8" class="text-center text-muted">
             Todavía no tienes aplicaciones configuradas.
         </td>
     </tr>
 
+    <!-- LISTADO -->
     <tr th:each="app : ${aplicaciones}">
         <td th:text="${app.nombre}">Nombre</td>
         <td th:text="${app.lenguaje}">Lenguaje</td>
         <td th:text="${app.tipoBaseDatos}">BD</td>
         <td th:text="${app.proveedorCiCd}">Proveedor</td>
-        <td th:text="${#temporals.format(app.fechaCreacion, 'dd/MM/yyyy HH:mm')}">
-            01/01/2025 12:00
-        </td>
 
-        <td th:text="${progresoPorApp[app.id] != null
-              ? (progresoPorApp[app.id].ok + ' / ' + progresoPorApp[app.id].total)
-              : '0 / 6'}">
-            0 / 6
-        </td>
-
-        <td th:text="${estadoPorApp != null && estadoPorApp[app.id] != null
-              ? estadoPorApp[app.id]
-              : '--'}">
+        <td th:text="${app.fechaCreacion != null
+                ? #temporals.format(app.fechaCreacion, 'dd/MM/yyyy HH:mm')
+                : '--'}">
             --
         </td>
 
+        <!-- PROGRESO -->
+        <td th:text="${progresoPorApp[app.id] != null
+                ? (progresoPorApp[app.id].ok + ' / ' + progresoPorApp[app.id].total)
+                : ('0 / ' + totalPasos)}">
+            0 / 6
+        </td>
+
+        <!-- ESTADO -->
+        <td th:text="${estadoPorApp[app.id] != null
+                ? estadoPorApp[app.id]
+                : '--'}">
+            --
+        </td>
+
+        <!-- ACCIONES -->
         <td>
             <div class="d-flex gap-2 flex-wrap">
 
-                <!-- EDITAR -->
                 <a th:href="@{/aplicaciones/editar/{id}(id=${app.id})}"
                    class="btn btn-warning btn-sm">
                     Editar
                 </a>
 
-                <!-- ELIMINAR -->
                 <a th:href="@{/aplicaciones/eliminar/{id}(id=${app.id})}"
                    class="btn btn-danger btn-sm"
                    onclick="return confirm('¿Seguro que quieres eliminar esta aplicación?');">
                     Eliminar
                 </a>
 
-                <!-- DESCARGAR ZIP -->
                 <a th:href="@{/aplicaciones/{id}/zip(id=${app.id})}"
                    class="btn btn-info btn-sm text-white">
                     Descargar ZIP
                 </a>
-                <!-- DESCARGAR VARIABLES -->
+
                 <a th:href="@{/aplicaciones/{id}/variables(id=${app.id})}"
                    class="btn btn-outline-primary btn-sm">
                     Variables (.txt)
                 </a>
 
-                <!-- ASISTENTE -->
-                <a th:href="@{/wizard/paso0(appId=${app.id})}" class="btn btn-primary btn-sm">
+                <a th:href="@{/wizard/paso0(appId=${app.id})}"
+                   class="btn btn-primary btn-sm">
                     Asistente
                 </a>
 
             </div>
         </td>
     </tr>
+
     </tbody>
 </table>
 

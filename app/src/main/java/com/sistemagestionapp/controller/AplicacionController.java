@@ -1,6 +1,7 @@
 package com.sistemagestionapp.controller;
 
 import com.sistemagestionapp.model.Aplicacion;
+import com.sistemagestionapp.model.ControlDespliegue;
 import com.sistemagestionapp.model.EstadoControl;
 import com.sistemagestionapp.model.Lenguaje;
 import com.sistemagestionapp.model.PasoDespliegue;
@@ -21,9 +22,11 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Controlador encargado de la gestión completa de las aplicaciones del usuario.
@@ -53,38 +56,55 @@ public class AplicacionController {
     private ControlDespliegueRepository controlDespliegueRepository;
 
     /**
-     * Muestro el listado de aplicaciones del usuario autenticado.
-     * Obtengo el usuario desde el Principal (Spring Security) y solo
-     * cargo las aplicaciones que le pertenecen.
+     * PASOS REALES del asistente para calcular progreso.
+     * Excluyo RESUMEN_FINAL porque es un “estado calculado/visual”.
      *
-     * Además, calculo el progreso del asistente de despliegue para
-     * cada aplicación, mostrando cuántos pasos están en OK y el estado
-     * general (PENDIENTE / EN PROGRESO / OK).
+     * Ajusta este set EXACTAMENTE a los pasos que uses en tu wizard.
+     */
+    private static final EnumSet<PasoDespliegue> PASOS_REALES = EnumSet.of(
+            PasoDespliegue.PRIMER_COMMIT,
+            PasoDespliegue.SONAR_ANALISIS,
+            PasoDespliegue.SONAR_INTEGRACION_GIT,
+            PasoDespliegue.REPOSITORIO_GIT,
+            PasoDespliegue.IMAGEN_ECR,
+            PasoDespliegue.BASE_DATOS,
+            PasoDespliegue.DESPLIEGUE_EC2
+    );
+
+    /**
+     * Muestro el listado de aplicaciones del usuario autenticado.
+     * ✅ Importante: TODO va por appId, así no se mezclan datos entre apps.
      */
     @GetMapping
     public String listarAplicaciones(Model model, Principal principal) {
 
-        // Obtengo el correo del usuario logueado
+        // 1) Usuario logueado
         String correo = principal.getName();
-
-        // Busco el usuario completo en base de datos
         Usuario propietario = usuarioService.obtenerPorCorreo(correo);
 
-        // Cargo solo las aplicaciones del usuario autenticado
+        // 2) Solo aplicaciones de este usuario
         List<Aplicacion> aplicaciones = aplicacionService.listarPorPropietario(propietario);
 
+        // 3) Mapas por appId
         Map<Long, ProgresoDespliegue> progresoPorApp = new HashMap<>();
         Map<Long, String> estadoPorApp = new HashMap<>();
+        Map<Long, EstadoControl> resumenFinalPorApp = new HashMap<>();
 
-        int totalPasos = PasoDespliegue.values().length;
+        int totalPasos = PASOS_REALES.size();
 
-        // Para cada aplicación calculo su progreso en el asistente
         for (Aplicacion app : aplicaciones) {
+            Long appId = app.getId();
 
-            long ok = controlDespliegueRepository
-                    .countByAplicacionIdAndEstado(app.getId(), EstadoControl.OK);
+            // Traigo todos los controles de ESA app
+            List<ControlDespliegue> controles = controlDespliegueRepository.findByAplicacionIdOrderByPasoAsc(appId);
 
-            progresoPorApp.put(app.getId(), new ProgresoDespliegue(ok, totalPasos));
+            // Cuento OK solo en pasos reales (para que NO te “contamine” RESUMEN_FINAL)
+            long ok = controles.stream()
+                    .filter(c -> c.getPaso() != null && PASOS_REALES.contains(c.getPaso()))
+                    .filter(c -> c.getEstado() == EstadoControl.OK)
+                    .count();
+
+            progresoPorApp.put(appId, new ProgresoDespliegue(ok, totalPasos));
 
             String estado;
             if (ok == 0) {
@@ -94,21 +114,27 @@ public class AplicacionController {
             } else {
                 estado = "EN PROGRESO";
             }
+            estadoPorApp.put(appId, estado);
 
-            estadoPorApp.put(app.getId(), estado);
+            // (Opcional) estado del RESUMEN_FINAL si existe
+            Optional<ControlDespliegue> resumen = controlDespliegueRepository.findByAplicacionIdAndPaso(
+                    appId,
+                    PasoDespliegue.RESUMEN_FINAL
+            );
+            resumenFinalPorApp.put(appId, resumen.map(ControlDespliegue::getEstado).orElse(EstadoControl.PENDIENTE));
         }
 
         model.addAttribute("aplicaciones", aplicaciones);
         model.addAttribute("progresoPorApp", progresoPorApp);
         model.addAttribute("estadoPorApp", estadoPorApp);
+        model.addAttribute("resumenFinalPorApp", resumenFinalPorApp); // por si lo usas en UI
+        model.addAttribute("totalPasos", totalPasos); // ✅ para el HTML
 
         return "aplicaciones";
     }
 
     /**
-     * Muestro el formulario para crear una nueva aplicación.
-     * Inicializo una aplicación vacía y cargo los valores de los enums
-     * necesarios para los selects del formulario.
+     * Formulario para crear una nueva aplicación.
      */
     @GetMapping("/nueva")
     public String mostrarFormularioNueva(Model model) {
@@ -125,14 +151,14 @@ public class AplicacionController {
     }
 
     /**
-     * Muestro el formulario de edición de una aplicación existente.
-     * Cargo la aplicación por su ID y reutilizo el mismo formulario
-     * que para la creación.
+     * Formulario para editar una aplicación existente.
      */
     @GetMapping("/editar/{id}")
-    public String mostrarFormularioEditar(@PathVariable Long id, Model model) {
+    public String mostrarFormularioEditar(@PathVariable Long id, Model model, Principal principal) {
 
+        // (Recomendado) validar ownership para que nadie edite apps de otros
         Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+        validarPropietario(aplicacion, principal);
 
         model.addAttribute("aplicacion", aplicacion);
         model.addAttribute("lenguajes", Lenguaje.values());
@@ -144,16 +170,13 @@ public class AplicacionController {
     }
 
     /**
-     * Genero y descargo un fichero TXT con las variables de entorno
-     * necesarias para la aplicación.
-     *
-     * Este fichero sirve para que el usuario pueda configurar
-     * GitHub Actions, GitLab CI o Jenkins de forma sencilla.
+     * Descarga TXT con variables.
      */
     @GetMapping("/{id}/variables")
-    public void descargarVariables(@PathVariable Long id, HttpServletResponse response) throws IOException {
+    public void descargarVariables(@PathVariable Long id, HttpServletResponse response, Principal principal) throws IOException {
 
         Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+        validarPropietario(aplicacion, principal);
 
         String txt = variablesSecretTxtService.generarTxt(aplicacion, null);
         String filename = variablesSecretTxtService.nombreFichero(aplicacion);
@@ -166,43 +189,57 @@ public class AplicacionController {
     }
 
     /**
-     * Guardo una aplicación nueva o editada.
-     * Asocio siempre la aplicación al usuario autenticado para evitar
-     * que se puedan crear aplicaciones sin propietario.
+     * Guardar aplicación nueva o editada.
      */
     @PostMapping("/guardar")
-    public String guardarAplicacion(@ModelAttribute("aplicacion") Aplicacion aplicacion,
-                                    Principal principal) {
+    public String guardarAplicacion(@ModelAttribute("aplicacion") Aplicacion aplicacion, Principal principal) {
 
         String correo = principal.getName();
         Usuario propietario = usuarioService.obtenerPorCorreo(correo);
 
         aplicacion.setPropietario(propietario);
-
         aplicacionService.guardar(aplicacion);
 
         return "redirect:/aplicaciones";
     }
 
     /**
-     * Genero un ZIP con toda la configuración necesaria para la aplicación.
-     * El contenido del ZIP depende del tipo de proyecto (Java o Python)
-     * y del proveedor CI/CD seleccionado.
-     *
-     * Toda la lógica se delega al ZipGeneratorService.
+     * Descarga ZIP de configuración.
      */
     @GetMapping("/{id}/zip")
-    public void descargarZip(@PathVariable Long id, HttpServletResponse response) throws IOException {
+    public void descargarZip(@PathVariable Long id, HttpServletResponse response, Principal principal) throws IOException {
+
+        Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+        validarPropietario(aplicacion, principal);
+
         zipGeneratorService.generarZipAplicacion(id, response);
     }
 
     /**
-     * Elimino una aplicación por su ID.
-     * Tras eliminarla, redirijo de nuevo al listado de aplicaciones.
+     * Eliminar aplicación.
      */
     @GetMapping("/eliminar/{id}")
-    public String eliminarAplicacion(@PathVariable Long id) {
+    public String eliminarAplicacion(@PathVariable Long id, Principal principal) {
+
+        Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
+        validarPropietario(aplicacion, principal);
+
         aplicacionService.eliminar(id);
         return "redirect:/aplicaciones";
+    }
+
+    /**
+     * Helper: valida que la app pertenece al usuario logueado.
+     * (Evita que otro usuario vea/borre/descargue cosas de otra app)
+     */
+    private void validarPropietario(Aplicacion app, Principal principal) {
+        if (app == null || app.getPropietario() == null || principal == null) {
+            throw new RuntimeException("Acceso no permitido");
+        }
+        String correo = principal.getName();
+        String correoProp = app.getPropietario().getCorreo();
+        if (correoProp == null || !correoProp.equalsIgnoreCase(correo)) {
+            throw new RuntimeException("Acceso no permitido");
+        }
     }
 }

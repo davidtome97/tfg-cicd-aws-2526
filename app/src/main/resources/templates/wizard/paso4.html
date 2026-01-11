@@ -1,11 +1,15 @@
 <!DOCTYPE html>
-<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<html lang="es" xmlns:th="http://www.thymeleaf.org" xmlns:margin-bottom="http://www.w3.org/1999/xhtml">
 <head>
     <meta charset="UTF-8">
     <title>Paso 4 – Comprobar imagen en ECR</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS (tutorial guiado) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
 
     <meta name="appId" th:content="${appId}">
 </head>
@@ -30,43 +34,128 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" id="tutorial_root" style="margin-bottom: 70px;">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="mb-0">Paso 4 – Comprobar imagen en ECR</h2>
-        <a href="/manuales/paso_4.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
+        <h2 class="mb-0">Paso 4 – Configurar variables AWS + comprobar imagen en ECR</h2>
+
+        <div class="d-flex gap-2">
+            <a href="/manuales/paso_4.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Ver guía de este paso
+            </a>
+
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
     </div>
 
-    <p class="text-muted">
-        Se comprueba que existe una imagen Docker en Amazon ECR
-        con el nombre y el tag indicados.
+    <p class="text-muted" id="intro_texto">
+        En este paso introduces las variables necesarias para acceder a AWS/ECR y se comprueba
+        que existe una imagen Docker en Amazon ECR con el repositorio y tag indicados.
+        Si todo sale OK, al final verás las variables para copiarlas como <b>Secrets</b>.
     </p>
 
-    <div class="card p-4 shadow-sm">
+    <div class="card p-4 shadow-sm" id="card_paso4">
 
-        <div class="mb-3">
-            <label class="form-label">Repositorio ECR</label>
-            <input id="repositoryName"
+        <!-- =========================
+             ✅ VARIABLES AWS (SECRETS)
+             ========================= -->
+
+        <h5 class="mb-3">Variables para crear como Secrets</h5>
+
+        <div class="mb-3" id="ecr_repo_container">
+            <label class="form-label">ECR_REPOSITORY</label>
+            <input id="ecrRepository"
                    class="form-control"
-                   placeholder="Ej: davidtome97/tfg-cicd-aws-2526">
+                   placeholder="Ej: tfg-cicd-aws-2526"
+                   th:value="${ecrRepository}">
             <div class="form-text">
                 Nombre del repositorio en ECR (sin URL).
             </div>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Tag de la imagen</label>
+        <div class="mb-3" id="aws_region_container">
+            <label class="form-label">AWS_REGION</label>
+            <input id="awsRegion"
+                   class="form-control"
+                   placeholder="Ej: eu-west-1"
+                   th:value="${awsRegion}">
+            <div class="form-text">
+                Región donde está tu ECR (por ejemplo: eu-west-1).
+            </div>
+        </div>
+
+        <div class="mb-3" id="aws_account_container">
+            <label class="form-label">AWS_ACCOUNT_ID</label>
+            <input id="awsAccountId"
+                   class="form-control"
+                   placeholder="Ej: 123456789012"
+                   th:value="${awsAccountId}">
+            <div class="form-text">
+                ID de cuenta AWS (12 dígitos).
+            </div>
+        </div>
+
+        <div class="mb-3" id="aws_access_container">
+            <label class="form-label">AWS_ACCESS_KEY_ID</label>
+            <input id="awsAccessKeyId"
+                   class="form-control"
+                   placeholder="Ej: AKIA..."
+                   th:value="${awsAccessKeyId}">
+        </div>
+
+        <div class="mb-3" id="aws_secret_container">
+            <label class="form-label">AWS_SECRET_ACCESS_KEY</label>
+
+            <div class="input-group">
+                <!-- ✅ oculto (puntos) -->
+                <input id="awsSecretAccessKey"
+                       type="password"
+                       class="form-control"
+                       placeholder="Secreto AWS"
+                       th:value="${awsSecretAccessKey}">
+
+                <!-- ✅ solo copiar (sin mostrar en claro) -->
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        id="btn_copiar_secret"
+                        onclick="copiarSecretAws()">
+                    Copiar
+                </button>
+            </div>
+
+            <div class="form-text">
+                Se guarda como secret. Se muestra oculto (••••••). Pulsa <b>Copiar</b> para copiarlo.
+            </div>
+        </div>
+
+        <hr class="my-4">
+
+        <!-- =========================
+             ✅ COMPROBACIÓN IMAGEN ECR
+             ========================= -->
+
+        <h5 class="mb-3">Comprobación de imagen</h5>
+
+        <div class="mb-3" id="image_tag_container">
+            <label class="form-label">IMAGE_TAG</label>
             <input id="imageTag"
                    class="form-control"
-                   placeholder="Ej: latest">
+                   placeholder="Ej: latest"
+                   th:value="${imageTag}">
+            <div class="form-text">
+                Tag de la imagen en ECR (por ejemplo: latest, v1.0.0).
+            </div>
         </div>
 
         <button type="button"
                 onclick="ejecutarPaso4()"
-                class="btn btn-primary">
+                class="btn btn-primary"
+                id="btn_comprobar">
             Comprobar
         </button>
 
@@ -86,6 +175,89 @@
            class="text-muted mb-0"
            th:text="${controlPaso != null ? controlPaso.mensaje : ''}">
         </p>
+
+        <!-- ✅ BLOQUE "OK" con variables para copiar -->
+        <div id="bloqueSecrets" class="mt-4 d-none">
+            <hr>
+            <h5 class="mb-2">Ahora crea en tu repositorio estas variables secretas:</h5>
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Valor</th>
+                        <th class="text-end">Acción</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td><code>ECR_REPOSITORY</code></td>
+                        <td><code id="out_ecrRepository"></code></td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    onclick="copiarTexto('out_ecrRepository')">
+                                Copiar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>AWS_REGION</code></td>
+                        <td><code id="out_awsRegion"></code></td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    onclick="copiarTexto('out_awsRegion')">
+                                Copiar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>AWS_ACCOUNT_ID</code></td>
+                        <td><code id="out_awsAccountId"></code></td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    onclick="copiarTexto('out_awsAccountId')">
+                                Copiar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>AWS_ACCESS_KEY_ID</code></td>
+                        <td><code id="out_awsAccessKeyId"></code></td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    onclick="copiarTexto('out_awsAccessKeyId')">
+                                Copiar
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>AWS_SECRET_ACCESS_KEY</code></td>
+                        <!-- ✅ nunca mostramos el secreto en claro -->
+                        <td><code>••••••••••••••••</code></td>
+                        <td class="text-end">
+                            <button class="btn btn-outline-secondary btn-sm"
+                                    type="button"
+                                    onclick="copiarSecretAws()">
+                                Copiar
+                            </button>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-text">
+                Consejo: en GitHub → <b>Settings</b> → <b>Secrets and variables</b> → <b>Actions</b> → <b>New repository secret</b>.<br>
+                en GitLab → <b>Settings</b> → <b>CI/CD</b> → <b>Variables</b> → <b>Add variable</b>.<br>
+                en Jenkins → <b>Manage Jenkins</b> → <b>Credentials</b> → <b>(Global / Folder)</b> → <b>Add Credentials</b>.
+            </div>
+        </div>
+
     </div>
 
     <!-- ⚠️ AVISO BLOQUEO -->
@@ -95,16 +267,19 @@
         Debes completar correctamente este paso antes de continuar al siguiente.
     </div>
 
-    <!-- NAVEGACIÓN -->
-    <div class="mt-3 d-flex justify-content-between align-items-center">
+    <!-- NAVEGACIÓN (mismo diseño, fijos a los extremos) -->
+    <div class="mt-4 mb-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
+
+        <!-- Izquierda -->
         <a th:href="@{/wizard/paso3(appId=${appId})}"
-           class="btn btn-link">
-            &larr; Volver al paso 3
+           class="btn btn-outline-secondary">
+            ← Volver al paso 3
         </a>
 
-        <div>
+        <!-- Derecha -->
+        <div class="text-end">
             <button id="btnPaso5"
-                    class="btn btn-primary"
+                    class="btn btn-outline-secondary"
                     th:disabled="${!pasoActualCompleto}"
                     th:onclick="${pasoActualCompleto}
                         ? 'location.href=\'/wizard/paso5?appId=' + ${appId} + '\''
@@ -118,9 +293,13 @@
                 Completa este paso para poder continuar.
             </div>
         </div>
+
     </div>
 
 </div>
+
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
 
 <script>
     function getAppId() {
@@ -142,6 +321,37 @@
                     "badge bg-secondary";
     }
 
+    function limpiarErroresCampos() {
+        ["ecrRepository","awsRegion","awsAccountId","awsAccessKeyId","awsSecretAccessKey","imageTag"]
+            .forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove("is-invalid");
+            });
+    }
+
+    function marcarInvalidosSiVacios(payload) {
+        let hayError = false;
+
+        const campos = [
+            { id: "ecrRepository", value: payload.ecrRepository },
+            { id: "awsRegion", value: payload.awsRegion },
+            { id: "awsAccountId", value: payload.awsAccountId },
+            { id: "awsAccessKeyId", value: payload.awsAccessKeyId },
+            { id: "awsSecretAccessKey", value: payload.awsSecretAccessKey },
+            { id: "imageTag", value: payload.imageTag }
+        ];
+
+        for (const c of campos) {
+            const el = document.getElementById(c.id);
+            const v = (c.value || "").trim();
+            if (!v) {
+                hayError = true;
+                if (el) el.classList.add("is-invalid");
+            }
+        }
+        return hayError;
+    }
+
     (function pintarEstadoInicial() {
         const badge = document.getElementById("estado");
         if (!badge) return;
@@ -153,19 +363,109 @@
                     "badge bg-secondary";
     })();
 
+    function desbloquearPaso5(appId) {
+        const btn = document.getElementById("btnPaso5");
+        const msg = document.getElementById("msgBloqueo");
+        const alert = document.getElementById("alertBloqueo");
+
+        if (btn) {
+            btn.disabled = false;
+            btn.onclick = () =>
+                window.location.href =
+                    `/wizard/paso5?appId=${encodeURIComponent(appId)}`;
+        }
+
+        if (msg) msg.remove();
+        if (alert) alert.remove();
+    }
+
+    function mostrarBloqueSecrets(payload) {
+        document.getElementById("out_ecrRepository").textContent = payload.ecrRepository;
+        document.getElementById("out_awsRegion").textContent = payload.awsRegion;
+        document.getElementById("out_awsAccountId").textContent = payload.awsAccountId;
+        document.getElementById("out_awsAccessKeyId").textContent = payload.awsAccessKeyId;
+
+        const bloque = document.getElementById("bloqueSecrets");
+        if (bloque) bloque.classList.remove("d-none");
+    }
+
+    function ocultarBloqueSecrets() {
+        const bloque = document.getElementById("bloqueSecrets");
+        if (bloque) bloque.classList.add("d-none");
+    }
+
+    async function copiarTexto(elementId) {
+        const el = document.getElementById(elementId);
+        const text = (el?.textContent || "").trim();
+        if (!text) return;
+        await navigator.clipboard.writeText(text);
+    }
+
+    async function copiarSecretAws() {
+        const secret = (document.getElementById("awsSecretAccessKey")?.value || "").trim();
+        if (!secret) return;
+        await navigator.clipboard.writeText(secret);
+    }
+
+    // ✅ confirma en backend que el paso está OK + guardar variables
+    async function confirmarPaso4(appId, payload) {
+        const headers = {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        };
+
+        const body =
+            `appId=${encodeURIComponent(appId)}` +
+            `&ecrRepository=${encodeURIComponent(payload.ecrRepository)}` +
+            `&awsRegion=${encodeURIComponent(payload.awsRegion)}` +
+            `&awsAccountId=${encodeURIComponent(payload.awsAccountId)}` +
+            `&awsAccessKeyId=${encodeURIComponent(payload.awsAccessKeyId)}` +
+            `&awsSecretAccessKey=${encodeURIComponent(payload.awsSecretAccessKey)}` +
+            `&imageTag=${encodeURIComponent(payload.imageTag)}`;
+
+        const res = await fetch("/wizard/paso4/confirmar", {
+            method: "POST",
+            headers,
+            body
+        });
+
+        if (!res.ok) {
+            throw new Error("Error confirmando paso4. HTTP " + res.status);
+        }
+    }
+
     async function ejecutarPaso4() {
         const appId = getAppId();
-        const repositoryName =
-            document.getElementById("repositoryName").value || "";
-        const imageTag =
-            document.getElementById("imageTag").value || "";
+
+        const payload = {
+            ecrRepository: (document.getElementById("ecrRepository")?.value || "").trim(),
+            awsRegion: (document.getElementById("awsRegion")?.value || "").trim(),
+            awsAccountId: (document.getElementById("awsAccountId")?.value || "").trim(),
+            awsAccessKeyId: (document.getElementById("awsAccessKeyId")?.value || "").trim(),
+            awsSecretAccessKey: (document.getElementById("awsSecretAccessKey")?.value || "").trim(),
+            imageTag: (document.getElementById("imageTag")?.value || "").trim()
+        };
+
+        // limpiar errores previos + ocultar bloque secrets
+        limpiarErroresCampos();
+        ocultarBloqueSecrets();
+
+        // ✅ validar TODOS los campos (5 variables + tag)
+        if (marcarInvalidosSiVacios(payload)) {
+            setEstadoUI(
+                "KO",
+                "Debes completar TODOS los campos: ECR_REPOSITORY, AWS_REGION, AWS_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e IMAGE_TAG."
+            );
+            return;
+        }
 
         try {
             setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
 
+            // ✅ tu API actual usa repositoryName + imageTag.
+            // Para mantener compatibilidad, enviamos repositoryName = ecrRepository.
             const url = `/api/wizard/paso4?appId=${encodeURIComponent(appId)}`
-                + `&repositoryName=${encodeURIComponent(repositoryName)}`
-                + `&imageTag=${encodeURIComponent(imageTag)}`;
+                + `&repositoryName=${encodeURIComponent(payload.ecrRepository)}`
+                + `&imageTag=${encodeURIComponent(payload.imageTag)}`;
 
             const res = await fetch(url);
             if (!res.ok) throw new Error("HTTP " + res.status);
@@ -173,27 +473,77 @@
             const data = await res.json();
             setEstadoUI(data.estado, data.mensaje);
 
-            // ✅ DESBLOQUEAR PASO 5 SIN RECARGAR
             if (data.estado === "OK") {
-                const btn = document.getElementById("btnPaso5");
-                const msg = document.getElementById("msgBloqueo");
-                const alert = document.getElementById("alertBloqueo");
+                // 1) confirmo (persisto) variables en backend
+                await confirmarPaso4(appId, payload);
 
-                if (btn) {
-                    btn.disabled = false;
-                    btn.onclick = () =>
-                        window.location.href =
-                            `/wizard/paso5?appId=${encodeURIComponent(appId)}`;
-                }
+                // 2) muestro bloque con variables para copiar
+                mostrarBloqueSecrets(payload);
 
-                if (msg) msg.remove();
-                if (alert) alert.remove();
+                // 3) desbloqueo paso 5
+                desbloquearPaso5(appId);
             }
 
         } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 4.");
+            setEstadoUI("KO", "Error llamando al backend o confirmando el paso 4.");
         }
     }
+
+    /* ======================================================
+       ✅ INTROJS (mismo patrón que el ejemplo del profesor)
+       ====================================================== */
+    document.addEventListener('DOMContentLoaded', function () {
+        let steps = [
+            {
+                title: "AWS + ECR",
+                intro: "Bienvenido al tutorial del Paso 4. Aquí introduces las variables de AWS (Secrets) y compruebas que existe la imagen en ECR."
+            },
+            {
+                element: '#ecr_repo_container',
+                intro: "ECR_REPOSITORY: nombre del repositorio en Amazon ECR (sin URL)."
+            },
+            {
+                element: '#aws_region_container',
+                intro: "AWS_REGION: región donde está tu ECR (por ejemplo eu-west-1)."
+            },
+            {
+                element: '#aws_account_container',
+                intro: "AWS_ACCOUNT_ID: tu ID de cuenta AWS (12 dígitos)."
+            },
+            {
+                element: '#aws_access_container',
+                intro: "AWS_ACCESS_KEY_ID: clave de acceso de tu usuario IAM (se guarda como Secret)."
+            },
+            {
+                element: '#aws_secret_container',
+                intro: "AWS_SECRET_ACCESS_KEY: clave secreta (queda oculta). Puedes copiarla con el botón Copiar."
+            },
+            {
+                element: '#image_tag_container',
+                intro: "IMAGE_TAG: tag de la imagen a comprobar en ECR (latest, v1.0.0, etc.)."
+            },
+            {
+                element: '#btn_comprobar',
+                intro: "Pulsa aquí para comprobar. Si sale OK, se guardan las variables y aparece una tabla para copiarlas como Secrets."
+            },
+            {
+                element: '#btnPaso5',
+                intro: "Cuando el estado esté en OK, podrás continuar al Paso 5."
+            }
+        ];
+
+        const btn = document.getElementById('inicio_tutorial');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            introJs().setOptions({
+                steps: steps,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Terminar",
+            }).start();
+        });
+    });
 </script>
 
 </body>

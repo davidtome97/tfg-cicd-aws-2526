@@ -2,18 +2,21 @@
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Resumen del asistente CI/CD</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <meta name="appId" th:content="${appId}">
 </head>
 
 <body class="bg-light">
 
 <div class="container mt-3">
     <div class="d-flex justify-content-end mb-3">
-        <form th:action="@{/logout}" method="post">
-            <button type="submit" class="btn btn-outline-danger">
+        <form th:action="@{/logout}" method="post" class="m-0">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
                 Cerrar sesión
             </button>
         </form>
@@ -28,26 +31,57 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" style="margin-bottom: 70px;">
 
-    <h2 class="mb-3">Resumen de comprobaciones</h2>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div>
+            <h2 class="mb-0">Resumen de comprobaciones</h2>
+            <div class="text-muted">
+                Aquí tienes el estado de cada paso. Descarga el TXT con las variables para tu CI/CD.
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary"
+               th:href="@{/wizard/resumen/variables-txt(appId=${appId})}">
+                ⬇️ Descargar variables (.txt)
+            </a>
+
+            <button class="btn btn-secondary" type="button" onclick="exportarPdfDesdeDom()">
+                📄 Exportar resumen en PDF
+            </button>
+        </div>
+    </div>
 
     <p class="text-muted">
-        Este resumen recoge los resultados obtenidos en cada paso del asistente.
         Si algún paso aparece en rojo (<span class="badge bg-danger">KO</span>),
-        puedes volver atrás para revisarlo.
+        vuelve al paso correspondiente y corrige la configuración.
     </p>
 
-    <div class="mb-3">
-        <button class="btn btn-secondary" type="button"
-                onclick="exportarPdfDesdeDom()">
-            📄 Exportar resumen en PDF
-        </button>
+    <!-- PROGRESO GLOBAL -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <div class="fw-semibold">Progreso</div>
+                <div class="text-muted" id="txtProgreso">Calculando…</div>
+            </div>
+
+            <div class="flex-grow-1" style="min-width: 220px;">
+                <div class="progress" role="progressbar" aria-label="Progreso asistente">
+                    <div id="barProgreso" class="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <span id="badgeGlobal" class="badge bg-secondary">N/A</span>
+        </div>
     </div>
 
     <!-- RESULTADOS -->
     <div class="card p-4 shadow-sm mb-4">
-        <h4 class="mb-3">Resultados</h4>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Resultados</h4>
+            <small class="text-muted">Paso 0 → Paso 6</small>
+        </div>
 
         <ul class="list-group" id="listaPasos">
             <li class="list-group-item"
@@ -66,13 +100,13 @@
                     </span>
                 </div>
 
-                <small class="text-muted" th:text="${p.mensaje}"></small>
+                <small class="text-muted d-block mt-1" th:text="${p.mensaje}"></small>
             </li>
         </ul>
     </div>
 
     <!-- INTERPRETACIÓN -->
-    <div class="card p-4 shadow-sm">
+    <div class="card p-4 shadow-sm mb-4">
         <h4 class="mb-3">Interpretación del resultado</h4>
 
         <ul class="mb-2">
@@ -90,14 +124,14 @@
     </div>
 
     <!-- NAVEGACIÓN -->
-    <div class="mt-3 d-flex justify-content-between">
+    <div class="mt-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
         <a th:href="@{/wizard/paso6(appId=${appId})}"
-           class="btn btn-link">
-            &larr; Volver al paso 6
+           class="btn btn-outline-secondary">
+            ← Volver al paso 6
         </a>
 
         <a th:href="@{/aplicaciones}"
-           class="btn btn-primary">
+           class="btn btn-outline-secondary">
             Volver al listado
         </a>
     </div>
@@ -107,11 +141,43 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
+    function getAppId() {
+        const meta = document.querySelector('meta[name="appId"]');
+        return meta ? meta.getAttribute("content") : "";
+    }
+
     function estadoPaso(n) {
-        const li = document.querySelector(
-            `#listaPasos li[data-numero="${n}"]`
-        );
+        const li = document.querySelector(`#listaPasos li[data-numero="${n}"]`);
         return (li?.getAttribute("data-estado") || "N/A").trim();
+    }
+
+    function calcularProgreso() {
+        const items = Array.from(document.querySelectorAll("#listaPasos li[data-estado]"));
+        const total = items.length || 1;
+        const ok = items.filter(li => (li.getAttribute("data-estado") || "").trim() === "OK").length;
+        const ko = items.filter(li => (li.getAttribute("data-estado") || "").trim() === "KO").length;
+
+        const pct = Math.round((ok / total) * 100);
+
+        const bar = document.getElementById("barProgreso");
+        const txt = document.getElementById("txtProgreso");
+        const badge = document.getElementById("badgeGlobal");
+
+        if (bar) bar.style.width = pct + "%";
+        if (txt) txt.textContent = `${ok}/${total} pasos en OK (${pct}%).`;
+
+        if (badge) {
+            if (ok === total) {
+                badge.className = "badge bg-success";
+                badge.textContent = "COMPLETADO";
+            } else if (ko > 0) {
+                badge.className = "badge bg-danger";
+                badge.textContent = "REVISAR";
+            } else {
+                badge.className = "badge bg-secondary";
+                badge.textContent = "EN PROGRESO";
+            }
+        }
     }
 
     function pintarInterpretacion() {
@@ -130,13 +196,11 @@
         const i5  = document.getElementById("interp5");
         const i6  = document.getElementById("interp6");
 
-        // Paso 0
         i0.textContent =
             p0 === "OK" ? "Paso 0 OK → Repositorio inicializado y primer commit realizado."
                 : p0 === "KO" ? "Paso 0 KO → No se ha podido verificar el primer commit."
                     : "Paso 0 aún no se ha ejecutado.";
 
-        // Pasos 1 y 2
         i12.textContent =
             (p1 === "OK" && p2 === "OK")
                 ? "Pasos 1 y 2 OK → Integración Git ↔ SonarCloud correcta."
@@ -144,41 +208,32 @@
                     ? "Pasos 1 y/o 2 KO → Token, ProjectKey o análisis incorrectos."
                     : "Pasos 1 y 2 aún no se han ejecutado.";
 
-        // Paso 3
         i3.textContent =
             p3 === "OK" ? "Paso 3 OK → Repositorio Git accesible."
                 : p3 === "KO" ? "Paso 3 KO → El repositorio no existe o no tiene commits."
                     : "Paso 3 aún no se ha ejecutado.";
 
-        // Paso 4
         i4.textContent =
             p4 === "OK" ? "Paso 4 OK → Imagen Docker encontrada en ECR."
                 : p4 === "KO" ? "Paso 4 KO → No se encontró la imagen Docker en ECR."
                     : "Paso 4 aún no se ha ejecutado.";
 
-        // Paso 5
         i5.textContent =
-            p5 === "OK" ? "Paso 5 OK → Aplicación responde correctamente en EC2."
-                : p5 === "KO" ? "Paso 5 KO → EC2 no responde (IP, puerto o despliegue)."
+            p5 === "OK" ? "Paso 5 OK → Configuración de base de datos completada."
+                : p5 === "KO" ? "Paso 5 KO → Error en la configuración o generación de BD."
                     : "Paso 5 aún no se ha ejecutado.";
 
-        // Paso 6
         i6.textContent =
-            p6 === "OK" ? "Paso 6 OK → Guía de base de datos completada."
-                : p6 === "KO" ? "Paso 6 KO → Error generando o usando la guía de BD."
+            p6 === "OK" ? "Paso 6 OK → Variables EC2 listas."
+                : p6 === "KO" ? "Paso 6 KO → EC2 no responde o faltan variables (IP/puerto/ssh)."
                     : "Paso 6 aún no se ha ejecutado.";
     }
-
-    document.addEventListener("DOMContentLoaded", pintarInterpretacion);
 
     async function exportarPdfDesdeDom() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
 
-        const items = Array.from(
-            document.querySelectorAll("#listaPasos .list-group-item")
-        );
-
+        const items = Array.from(document.querySelectorAll("#listaPasos .list-group-item"));
         let y = 20;
 
         doc.setFont("helvetica", "bold");
@@ -189,14 +244,22 @@
         doc.setFont("helvetica", "normal");
         doc.setFontSize(11);
         doc.text("Fecha: " + new Date().toLocaleString(), 14, y);
-        y += 12;
+        y += 6;
+
+        const appId = getAppId();
+        if (appId) {
+            doc.text("appId: " + appId, 14, y);
+            y += 10;
+        } else {
+            y += 8;
+        }
 
         items.forEach(li => {
             if (y > 260) { doc.addPage(); y = 20; }
 
-            const titulo = li.querySelector("strong")?.textContent || "Paso";
-            const estado = li.querySelector(".badge")?.textContent || "N/A";
-            const mensaje = li.querySelector("small")?.textContent || "Sin mensaje.";
+            const titulo = (li.querySelector("strong")?.textContent || "Paso").trim();
+            const estado = (li.querySelector(".badge")?.textContent || "N/A").trim();
+            const mensaje = (li.querySelector("small")?.textContent || "Sin mensaje.").trim();
 
             doc.setFont("helvetica", "bold");
             doc.setFontSize(13);
@@ -204,6 +267,7 @@
             y += 6;
 
             doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
             doc.text("Estado: " + estado, 14, y);
             y += 5;
 
@@ -214,6 +278,11 @@
 
         doc.save("resumen_cicd.pdf");
     }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        calcularProgreso();
+        pintarInterpretacion();
+    });
 </script>
 
 </body>

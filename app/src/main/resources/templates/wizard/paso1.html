@@ -7,6 +7,9 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
+
     <meta name="appId" th:content="${appId}">
 </head>
 
@@ -30,48 +33,81 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" id="tutorial_root" style="margin-bottom:70px;">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="mb-0">Paso 1 – Configuración de SonarCloud</h2>
+        <h2>Paso 1 – Configuración de SonarCloud</h2>
 
-        <a href="/manuales/paso_1.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
+        <div class="d-flex gap-2">
+            <a href="/manuales/paso_1.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Ver guía de este paso
+            </a>
+
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
     </div>
 
     <p class="text-muted">
-        En este paso se valida la conexión con SonarCloud usando el
-        <strong>projectKey</strong> y el <strong>token</strong>.
+        En este paso se valida la conexión con SonarCloud usando
+        <strong>SONAR_PROJECT_KEY</strong> y <strong>SONAR_TOKEN</strong>.
     </p>
 
     <div class="card p-4 shadow-sm">
 
-        <div class="mb-3">
-            <label class="form-label">ProjectKey (SONAR_PROJECT_KEY)</label>
-            <input id="projectKey"
+        <!-- HOST -->
+        <div class="mb-3" id="sonarhost_container">
+            <label class="form-label">SONAR_HOST_URL</label>
+            <input id="sonarHostUrl"
                    class="form-control"
-                   placeholder="Ej: mi-organizacion_mi-proyecto">
+                   value="https://sonarcloud.io"
+                   readonly>
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Token SonarCloud (SONAR_TOKEN)</label>
+        <!-- ORGANIZATION -->
+        <div class="mb-3" id="sonarorg_container">
+            <label class="form-label">SONAR_ORGANIZATION</label>
+            <input id="sonarOrganization"
+                   class="form-control"
+                   th:value="${app != null ? app.sonarOrganization : ''}">
+        </div>
+
+        <!-- PROJECT KEY -->
+        <div class="mb-3" id="sonarproject_container">
+            <label class="form-label" for="projectKeyInput">SONAR_PROJECT_KEY</label>
+            <input id="projectKeyInput"
+                   class="form-control"
+                   th:value="${app != null ? app.sonarProjectKey : ''}"
+                   placeholder="Ej: mi-org_mi-proyecto"
+                   autocomplete="off"
+                   autocapitalize="off"
+                   spellcheck="false"
+                   inputmode="text"
+                   data-lpignore="true">
+        </div>
+
+        <!-- TOKEN -->
+        <div class="mb-3" id="sonartoken_container">
+            <label class="form-label">SONAR_TOKEN</label>
             <input id="token"
                    class="form-control"
-                   placeholder="Token SonarCloud">
+                   placeholder="Pega aquí tu token">
+            <div class="form-text">
+                El token NO se guarda. Si recargas, tendrás que volver a pegarlo.
+            </div>
         </div>
 
-        <button type="button"
-                onclick="ejecutarPaso1()"
-                class="btn btn-primary">
+        <button class="btn btn-primary" onclick="ejecutarPaso1()" id="btn_comprobar">
             Comprobar
         </button>
 
         <hr>
 
-        <!-- ESTADO -->
-        <p class="mt-3 fs-5">
+        <p class="fs-5">
             Estado:
             <span id="estado"
                   class="badge bg-secondary"
@@ -81,114 +117,338 @@
         </p>
 
         <p id="mensaje"
-           class="text-muted mb-0"
-           th:text="${controlPaso != null ? controlPaso.mensaje : ''}">
-        </p>
+           th:text="${controlPaso != null ? controlPaso.mensaje : ''}"
+           class="text-muted"></p>
+
+        <!-- PANEL SECRETS -->
+        <div id="secretsPanel" class="mt-4" style="display:none;">
+            <hr>
+            <div class="alert alert-success">
+                Variables para crear Secrets
+            </div>
+
+            <table class="table table-sm">
+                <tbody>
+                <tr><td>SONAR_HOST_URL</td><td><code id="v_sonarHostUrl"></code></td></tr>
+                <tr><td>SONAR_ORGANIZATION</td><td><code id="v_sonarOrganization"></code></td></tr>
+                <tr><td>SONAR_PROJECT_KEY</td><td><code id="v_projectKey"></code></td></tr>
+                <tr><td>SONAR_TOKEN</td><td><code id="v_sonarToken">(pegar de nuevo)</code></td></tr>
+                </tbody>
+            </table>
+        </div>
+
     </div>
 
-    <!-- ⚠️ AVISO BLOQUEO -->
-    <div id="alertBloqueo"
-         th:if="${!pasoActualCompleto}"
-         class="alert alert-warning mt-3">
-        Debes completar correctamente este paso antes de continuar al siguiente.
-    </div>
-
-    <!-- NAVEGACIÓN -->
-    <div class="mt-3 d-flex justify-content-between align-items-center">
-        <a th:href="@{/wizard/paso0(appId=${appId})}" class="btn btn-link">
-            &larr; Volver al paso 0
+    <div class="mt-4 d-flex justify-content-between">
+        <a th:href="@{/wizard/paso0(appId=${appId})}"
+           class="btn btn-outline-secondary">
+            ← Volver
         </a>
 
-        <div>
-            <button id="btnPaso2"
-                    class="btn btn-primary"
-                    th:disabled="${!pasoActualCompleto}"
-                    th:onclick="${pasoActualCompleto}
-                        ? 'location.href=\'/wizard/paso2?appId=' + ${appId} + '\''
-                        : null">
-                Ir al paso 2 →
-            </button>
-
-            <div id="msgBloqueo"
-                 th:if="${!pasoActualCompleto}"
-                 class="form-text text-danger mt-1">
-                Completa este paso para poder continuar.
-            </div>
-        </div>
+        <!-- ✅ Un solo botón/enlace (sin duplicar IDs) -->
+        <a id="btnPaso2"
+           class="btn btn-outline-secondary"
+           th:classappend="${!pasoActualCompleto} ? ' disabled' : ''"
+           th:href="${pasoActualCompleto}
+            ? @{/wizard/paso2(appId=${appId})}
+            : '#'"
+           th:attr="aria-disabled=${!pasoActualCompleto}">
+            Ir al paso 2 →
+        </a>
     </div>
 
 </div>
 
+
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
+
 <script>
-    function getAppId() {
-        const meta = document.querySelector('meta[name="appId"]');
-        if (!meta) throw new Error("appId missing");
-        return meta.getAttribute("content");
-    }
+    /* =========================
+       ✅ PASO 1 – SONARCLOUD (FIXED)
+       - Panel Secrets visible al recargar si estado OK (sin token).
+       - projectKey usa SIEMPRE id="projectKeyInput"
+       - Sin DOMContentLoaded duplicados
+       - Botón comprobar bloqueado mientras ejecuta
+       ========================= */
 
-    function setEstadoUI(estado, mensaje) {
-        const badge = document.getElementById("estado");
-        const msg = document.getElementById("mensaje");
+    (() => {
+        "use strict";
 
-        badge.textContent = estado || "N/A";
-        msg.textContent = mensaje || "";
+        const IDS = {
+            appMeta: 'meta[name="appId"]',
+            estado: "estado",
+            mensaje: "mensaje",
+            btnComprobar: "btn_comprobar",
+            btnPaso2: "btnPaso2",
+            msgBloqueo: "msgBloqueo",
+            alertBloqueo: "alertBloqueo",
+            secretsPanel: "secretsPanel",
 
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    }
+            sonarHostUrl: "sonarHostUrl",
+            sonarOrganization: "sonarOrganization",
+            projectKey: "projectKeyInput", // ✅ IMPORTANTE
+            token: "token",
 
-    (function pintarEstadoInicial() {
-        const badge = document.getElementById("estado");
-        if (!badge) return;
+            vHost: "v_sonarHostUrl",
+            vOrg: "v_sonarOrganization",
+            vKey: "v_projectKey",
+            vTok: "v_sonarToken",
 
-        const estado = badge.textContent.trim();
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    })();
+            introBtn: "inicio_tutorial"
+        };
 
-    async function ejecutarPaso1() {
-        const appId = getAppId();
-        const token = document.getElementById("token").value || "";
-        const projectKey = document.getElementById("projectKey").value || "";
+        function $(id) {
+            return document.getElementById(id);
+        }
 
-        try {
-            setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
+        function getAppId() {
+            const meta = document.querySelector(IDS.appMeta);
+            if (!meta) throw new Error("appId missing");
+            const v = (meta.getAttribute("content") || "").trim();
+            if (!v) throw new Error("appId empty");
+            return v;
+        }
 
-            const url = `/api/wizard/paso1?appId=${encodeURIComponent(appId)}`
-                + `&token=${encodeURIComponent(token)}`
-                + `&projectKey=${encodeURIComponent(projectKey)}`;
+        function setEstadoUI(estado, mensaje) {
+            const badge = $(IDS.estado);
+            const msg = $(IDS.mensaje);
+            if (!badge || !msg) return;
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("HTTP " + res.status);
+            const st = (estado || "N/A").trim();
+            badge.textContent = st;
+            msg.textContent = mensaje || "";
 
-            const data = await res.json();
-            setEstadoUI(data.estado, data.mensaje);
+            badge.className =
+                st === "OK" ? "badge bg-success" :
+                    st === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
 
-            // ✅ DESBLOQUEO EN CALIENTE
-            if (data.estado === "OK") {
-                const btn = document.getElementById("btnPaso2");
-                const msg = document.getElementById("msgBloqueo");
-                const alert = document.getElementById("alertBloqueo");
+        function limpiarErroresCampos() {
+            [IDS.sonarHostUrl, IDS.sonarOrganization, IDS.projectKey, IDS.token].forEach(id => {
+                const el = $(id);
+                if (!el) return;
+                el.classList.remove("is-invalid");
+            });
+        }
 
-                if (btn) {
-                    btn.disabled = false;
-                    btn.onclick = () =>
-                        window.location.href =
-                            `/wizard/paso2?appId=${encodeURIComponent(appId)}`;
+        function marcarInvalidosSiVacios(payload) {
+            let hayError = false;
+
+            const mapa = [
+                { id: IDS.sonarHostUrl, value: payload.sonarHostUrl },
+                { id: IDS.sonarOrganization, value: payload.sonarOrganization },
+                { id: IDS.projectKey, value: payload.projectKey },
+                { id: IDS.token, value: payload.sonarToken }
+            ];
+
+            for (const c of mapa) {
+                const el = $(c.id);
+                const v = (c.value || "").trim();
+                if (!v) {
+                    hayError = true;
+                    if (el) el.classList.add("is-invalid");
+                }
+            }
+            return hayError;
+        }
+
+        function mostrarPanelSecrets(payload) {
+            const panel = $(IDS.secretsPanel);
+            if (!panel) return;
+
+            const host = (payload.sonarHostUrl || "").trim();
+            const org = (payload.sonarOrganization || "").trim();
+            const key = (payload.projectKey || "").trim();
+            const tok = (payload.sonarToken || "").trim();
+
+            const elHost = $(IDS.vHost);
+            const elOrg = $(IDS.vOrg);
+            const elKey = $(IDS.vKey);
+            const elTok = $(IDS.vTok);
+
+            if (elHost) elHost.textContent = host;
+            if (elOrg) elOrg.textContent = org;
+            if (elKey) elKey.textContent = key;
+
+            // ✅ si no hay token al recargar, indicamos que hay que pegarlo otra vez
+            if (elTok) elTok.textContent = tok || "(pegar de nuevo)";
+
+            panel.style.display = "block";
+        }
+
+        function ocultarPanelSecrets() {
+            const panel = $(IDS.secretsPanel);
+            if (panel) panel.style.display = "none";
+        }
+
+        async function copiarValor(elementId) {
+            const el = document.getElementById(elementId);
+            const txt = (el?.textContent || "").trim();
+            if (!txt || txt === "(pegar de nuevo)") return;
+
+            try {
+                await navigator.clipboard.writeText(txt);
+            } catch {
+                const ta = document.createElement("textarea");
+                ta.value = txt;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                ta.remove();
+            }
+        }
+
+        function pintarEstadoInicial() {
+            const badge = $(IDS.estado);
+            if (!badge) return;
+
+            const estado = badge.textContent.trim();
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
+
+        function desbloquearPaso2(appId) {
+            const btn = document.getElementById("btnPaso2");
+            if (!btn) return;
+
+            btn.classList.remove("disabled");
+            btn.removeAttribute("aria-disabled");
+            btn.href = `/wizard/paso2?appId=${encodeURIComponent(appId)}`;
+        }
+
+        async function confirmarPaso1(appId, payload) {
+            const headers = {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+            };
+
+            const body =
+                `appId=${encodeURIComponent(appId)}` +
+                `&sonarHostUrl=${encodeURIComponent(payload.sonarHostUrl)}` +
+                `&sonarOrganization=${encodeURIComponent(payload.sonarOrganization)}` +
+                `&projectKey=${encodeURIComponent(payload.projectKey)}` +
+                `&sonarToken=${encodeURIComponent(payload.sonarToken)}`;
+
+            const res = await fetch("/wizard/paso1/confirmar", {
+                method: "POST",
+                headers,
+                body
+            });
+
+            if (!res.ok) {
+                throw new Error("Error confirmando paso1. HTTP " + res.status);
+            }
+        }
+
+        async function ejecutarPaso1() {
+            const btn = $(IDS.btnComprobar);
+            if (btn) btn.disabled = true;
+
+            try {
+                const appId = getAppId();
+
+                const payload = {
+                    sonarHostUrl: "https://sonarcloud.io",
+                    sonarOrganization: ($(IDS.sonarOrganization)?.value || "").trim(),
+                    projectKey: ($(IDS.projectKey)?.value || "").trim(), // ✅ projectKeyInput
+                    sonarToken: ($(IDS.token)?.value || "").trim()
+                };
+
+                limpiarErroresCampos();
+
+                if (!payload.sonarHostUrl || !payload.sonarOrganization || !payload.projectKey || !payload.sonarToken) {
+                    ocultarPanelSecrets();
+                    marcarInvalidosSiVacios(payload);
+                    setEstadoUI(
+                        "KO",
+                        "Debes completar TODOS los campos: SONAR_HOST_URL, SONAR_ORGANIZATION, SONAR_PROJECT_KEY y SONAR_TOKEN."
+                    );
+                    return;
                 }
 
-                if (msg) msg.remove();
-                if (alert) alert.remove();
-            }
+                setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
 
-        } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 1.");
+                const url =
+                    `/api/wizard/paso1?appId=${encodeURIComponent(appId)}` +
+                    `&token=${encodeURIComponent(payload.sonarToken)}` +
+                    `&projectKey=${encodeURIComponent(payload.projectKey)}`;
+
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("HTTP " + res.status);
+
+                const data = await res.json();
+                setEstadoUI(data.estado, data.mensaje);
+
+                if (data.estado === "OK") {
+                    mostrarPanelSecrets(payload);
+                    await confirmarPaso1(appId, payload);
+                    desbloquearPaso2(appId);
+                } else {
+                    ocultarPanelSecrets();
+                }
+
+            } catch (e) {
+                ocultarPanelSecrets();
+                setEstadoUI("KO", "Error llamando al backend o confirmando el paso 1.");
+            } finally {
+                if (btn) btn.disabled = false;
+            }
         }
-    }
+
+        function setupIntroJs() {
+            const btn = $(IDS.introBtn);
+            if (!btn) return;
+
+            const steps = [
+                { title: "SONARCLOUD", intro: "Bienvenido al tutorial del Paso 1. Aquí rellenas las variables para tus Secrets y validas SonarCloud." },
+                { element: "#sonarhost_container", intro: "SONAR_HOST_URL: URL de SonarCloud. En este asistente viene predefinida: https://sonarcloud.io" },
+                { element: "#sonarorg_container", intro: "SONAR_ORGANIZATION: organización en SonarCloud (se ve en la URL o en el panel del proyecto)." },
+                { element: "#sonarproject_container", intro: "SONAR_PROJECT_KEY: clave del proyecto. Se usa para la comprobación." },
+                { element: "#sonartoken_container", intro: "SONAR_TOKEN: token generado en SonarCloud. Se usa para la comprobación." },
+                { element: "#btn_comprobar", intro: "Pulsa aquí para comprobar. Si sale OK, aparecerá un panel con las 4 variables y sus valores para crear los Secrets." },
+                { element: "#secretsPanel", intro: "Aquí verás las variables y sus valores. Puedes copiarlas y pegarlas en Secrets." }
+            ];
+
+            btn.addEventListener("click", function () {
+                this.style.animation = "none";
+                introJs().setOptions({
+                    steps,
+                    nextLabel: "Siguiente",
+                    prevLabel: "Anterior",
+                    doneLabel: "Terminar"
+                }).start();
+            });
+        }
+
+        function mostrarPanelSiEstadoOKAlRecargar() {
+            const estado = (($(IDS.estado)?.textContent) || "").trim();
+            if (estado !== "OK") return;
+
+            const payload = {
+                sonarHostUrl: "https://sonarcloud.io",
+                sonarOrganization: ($(IDS.sonarOrganization)?.value || "").trim(),
+                projectKey: ($(IDS.projectKey)?.value || "").trim(), // ✅ projectKeyInput
+                sonarToken: "" // intencional
+            };
+
+            if (payload.sonarOrganization && payload.projectKey) {
+                mostrarPanelSecrets(payload);
+            }
+        }
+
+        // Exponer funciones para onclick del HTML
+        window.ejecutarPaso1 = ejecutarPaso1;
+        window.copiarValor = copiarValor;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            pintarEstadoInicial();
+            setupIntroJs();
+            mostrarPanelSiEstadoOKAlRecargar();
+        });
+
+    })();
 </script>
 
 </body>

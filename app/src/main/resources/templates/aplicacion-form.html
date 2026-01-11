@@ -7,15 +7,19 @@
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
 </head>
 
 <body class="bg-light">
 
-<nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+<nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top" id="navTop">
     <div class="container">
         <span class="navbar-brand fw-semibold">Sistema de Gestión</span>
 
-        <div class="ms-auto d-flex align-items-center gap-2">
+        <div class="ms-auto d-flex align-items-center gap-2" id="navActions">
             <a th:href="@{/aplicaciones}" class="btn btn-outline-secondary btn-sm">
                 Volver al listado
             </a>
@@ -31,20 +35,33 @@
 
 <div class="container py-4">
 
-    <div class="mb-3">
-        <h2 class="mb-0 fw-bold"
-            th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">
-            Nueva aplicación
-        </h2>
-        <div class="text-muted">Completa la configuración y guarda para generar la plantilla.</div>
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3" id="headerNuevaApp">
+        <div>
+            <h2 class="mb-0 fw-bold"
+                th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">
+                Nueva aplicación
+            </h2>
+            <div class="text-muted">Completa la configuración y guarda para generar la plantilla.</div>
+        </div>
+
+        <button id="inicio_tutorial"
+                type="button"
+                class="btn btn-outline-secondary btn-sm">
+            Iniciar tutorial
+        </button>
     </div>
 
     <!-- FORM PRINCIPAL -->
-    <form th:action="@{/aplicaciones/guardar}" th:object="${aplicacion}" method="post" id="appForm" novalidate>
+    <form th:action="@{/aplicaciones/guardar}"
+          th:object="${aplicacion}"
+          method="post"
+          id="appForm"
+          novalidate>
+
         <input type="hidden" th:field="*{id}"/>
 
         <!-- Datos generales -->
-        <div class="card shadow-sm mb-3">
+        <div class="card shadow-sm mb-3" id="card_generales">
             <div class="card-header bg-white fw-semibold">Datos generales</div>
             <div class="card-body">
 
@@ -55,6 +72,7 @@
                     <input type="text"
                            class="form-control"
                            th:field="*{nombre}"
+                           id="appNombre"
                            required
                            minlength="2"
                            maxlength="80"
@@ -66,7 +84,10 @@
 
                 <div class="mb-3">
                     <label class="form-label">Descripción</label>
-                    <textarea class="form-control" th:field="*{descripcion}" rows="3"></textarea>
+                    <textarea class="form-control"
+                              th:field="*{descripcion}"
+                              id="appDescripcion"
+                              rows="3"></textarea>
                 </div>
 
                 <div class="mb-3" th:if="${aplicacion.id} != null">
@@ -81,11 +102,11 @@
         </div>
 
         <!-- Tecnología -->
-        <div class="card shadow-sm mb-3">
+        <div class="card shadow-sm mb-3" id="card_tecnologia">
             <div class="card-header bg-white fw-semibold">Tecnología</div>
             <div class="card-body">
 
-                <div class="mb-3">
+                <div class="mb-3" id="tipoProyecto_container">
                     <label class="form-label d-block">
                         Tipo de proyecto <span class="text-danger">*</span>
                     </label>
@@ -150,14 +171,14 @@
         </div>
 
         <!-- Base de datos -->
-        <div class="card shadow-sm mb-3">
+        <div class="card shadow-sm mb-3" id="card_bd">
             <div class="card-header bg-white fw-semibold">Base de datos</div>
             <div class="card-body">
                 <div class="row g-3">
 
                     <div class="col-12">
                         <label class="form-label">Tipo de base de datos</label>
-                        <select class="form-select" th:field="*{tipoBaseDatos}">
+                        <select class="form-select" th:field="*{tipoBaseDatos}" id="tipoBaseDatos">
                             <option th:each="tipo : ${tiposBaseDatos}"
                                     th:value="${tipo}"
                                     th:text="${tipo}">
@@ -165,7 +186,7 @@
                         </select>
                     </div>
 
-                    <div class="col-12">
+                    <div class="col-12" id="dbModo_container">
                         <label class="form-label d-block">Modo de base de datos</label>
                         <div class="d-flex flex-wrap gap-3">
                             <!-- DbModo enum => LOCAL/REMOTE -->
@@ -195,17 +216,27 @@
 
                     <div class="col-12 col-md-4">
                         <label class="form-label">Nombre BD</label>
-                        <input type="text" class="form-control" th:field="*{nombreBaseDatos}">
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{nombreBaseDatos}"
+                               id="dbNombre">
                     </div>
 
                     <div class="col-12 col-md-4">
                         <label class="form-label">Usuario BD</label>
-                        <input type="text" class="form-control" th:field="*{usuarioBaseDatos}">
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{usuarioBaseDatos}"
+                               id="dbUsuario">
                     </div>
 
                     <div class="col-12 col-md-4">
                         <label class="form-label">Password BD</label>
-                        <input type="password" class="form-control" th:field="*{passwordBaseDatos}">
+                        <input type="password"
+                               class="form-control"
+                               th:field="*{passwordBaseDatos}"
+                               id="dbPassword"
+                               autocomplete="new-password">
                     </div>
 
                 </div>
@@ -213,7 +244,7 @@
         </div>
 
         <!-- CI/CD -->
-        <div class="card shadow-sm mb-3">
+        <div class="card shadow-sm mb-3" id="card_cicd">
             <div class="card-header bg-white fw-semibold">CI/CD</div>
             <div class="card-body">
                 <div class="row g-3">
@@ -223,7 +254,10 @@
                             Proveedor <span class="text-danger">*</span>
                         </label>
 
-                        <select class="form-select" th:field="*{proveedorCiCd}" id="proveedorCiCd" required>
+                        <select class="form-select"
+                                th:field="*{proveedorCiCd}"
+                                id="proveedorCiCd"
+                                required>
                             <option value="" disabled
                                     th:selected="${aplicacion.proveedorCiCd == null}">
                                 -- Selecciona --
@@ -255,9 +289,13 @@
                         </div>
                     </div>
 
-                    <div class="col-12">
+                    <div class="col-12" id="sonarProjectKey_container">
                         <label class="form-label">Sonar Project Key</label>
-                        <input type="text" class="form-control" th:field="*{sonarProjectKey}">
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{sonarProjectKey}"
+                               id="sonarProjectKeyApp"
+                               autocomplete="off">
                     </div>
 
                 </div>
@@ -265,7 +303,7 @@
         </div>
 
         <!-- Despliegue -->
-        <div class="card shadow-sm mb-4">
+        <div class="card shadow-sm mb-4" id="card_despliegue">
             <div class="card-header bg-white fw-semibold">Despliegue</div>
             <div class="card-body">
                 <div class="row g-3">
@@ -275,6 +313,7 @@
                         <input type="number"
                                class="form-control"
                                th:field="*{puertoAplicacion}"
+                               id="puertoAplicacion"
                                placeholder="ej: 8081">
                         <div class="form-text">
                             Si no se especifica, se usará el puerto por defecto del proyecto.
@@ -283,13 +322,11 @@
 
                     <div class="col-12 col-md-8">
                         <label class="form-label" for="nombreImagenEcr">Repositorio ECR</label>
-
                         <input type="text"
                                class="form-control"
                                id="nombreImagenEcr"
                                th:field="*{nombreImagenEcr}"
                                placeholder="ej: demo-java-mongo">
-
                         <div class="form-text">
                             Nombre del repositorio en Amazon ECR (sin cuenta, región ni tag).
                         </div>
@@ -300,18 +337,21 @@
         </div>
 
         <!-- Acciones -->
-        <div class="d-flex flex-wrap justify-content-between gap-2">
+        <div class="d-flex flex-wrap justify-content-between gap-2" id="acciones_footer">
             <a th:href="@{/aplicaciones}" class="btn btn-outline-secondary">
                 Volver
             </a>
 
             <div class="d-flex flex-wrap gap-2">
-                <button type="submit" class="btn btn-primary">Guardar</button>
+                <button type="submit" class="btn btn-primary" id="btnGuardar">Guardar</button>
             </div>
         </div>
 
     </form>
 </div>
+
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
 
 <script>
     function aplicarUIProveedor() {
@@ -343,46 +383,128 @@
         }
     }
 
-    // Validación client-side bonita (Bootstrap)
     function validarRadios(name) {
         const nodes = document.querySelectorAll(`input[name="${name}"]`);
         return Array.from(nodes).some(n => n.checked);
     }
 
+    function setupIntroJsNuevaApp() {
+        const btn = document.getElementById('inicio_tutorial');
+        if (!btn) return;
+
+        const steps = [
+            {
+                title: "NUEVA APLICACIÓN",
+                intro: "Este formulario crea una aplicación en el sistema. Cada aplicación tendrá su propio asistente (wizard) con pasos independientes."
+            },
+            {
+                element: '#card_generales',
+                intro: "Datos generales: define nombre y descripción. El nombre es obligatorio."
+            },
+            {
+                element: '#appNombre',
+                intro: "Nombre de la aplicación: usa un nombre claro y único (ej: demo-java-jenkins)."
+            },
+            {
+                element: '#card_tecnologia',
+                intro: "Tecnología: elige tipo de proyecto y lenguaje. Esto decide qué plantilla se generará."
+            },
+            {
+                element: '#tipoProyecto_container',
+                intro: "Tipo de proyecto: CONFIG genera solo ficheros (CI/CD + Docker). DEMO añade una app de ejemplo."
+            },
+            {
+                element: '#lenguajeGroup',
+                intro: "Lenguaje: selecciona el lenguaje principal del proyecto."
+            },
+            {
+                element: '#card_bd',
+                intro: "Base de datos: selecciona el tipo y modo (local/remota) y rellena credenciales si aplica."
+            },
+            {
+                element: '#tipoBaseDatos',
+                intro: "Tipo de BD: PostgreSQL, MySQL, MongoDB, etc. según tu aplicación."
+            },
+            {
+                element: '#dbModo_container',
+                intro: "Modo de BD: LOCAL si va en Docker/misma máquina; REMOTE si va en cloud (RDS/Atlas)."
+            },
+            {
+                element: '#card_cicd',
+                intro: "CI/CD: selecciona el proveedor (GitHub/GitLab/Jenkins) y el repositorio."
+            },
+            {
+                element: '#proveedorCiCd',
+                intro: "Proveedor CI/CD: se generará GitHub Actions, GitLab CI o Jenkinsfile según lo elijas."
+            },
+            {
+                element: '#repositorioGit',
+                intro: "Repositorio Git: URL del repo donde se ejecutará el pipeline."
+            },
+            {
+                element: '#sonarProjectKeyApp',
+                intro: "Sonar Project Key: si ya lo conoces, puedes rellenarlo. Si no, se completará en el Paso 1 del wizard."
+            },
+            {
+                element: '#card_despliegue',
+                intro: "Despliegue: puerto interno y nombre del repositorio ECR (si despliegas en AWS)."
+            },
+            {
+                element: '#nombreImagenEcr',
+                intro: "Repositorio ECR: nombre en ECR sin cuenta, región ni tag."
+            },
+            {
+                element: '#btnGuardar',
+                intro: "Guardar: crea/actualiza la aplicación. Luego podrás entrar al wizard y completar los pasos."
+            }
+        ];
+
+        btn.addEventListener('click', function () {
+            this.style.animation = "none";
+            introJs().setOptions({
+                steps,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Terminar"
+            }).start();
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         aplicarUIProveedor();
+
         const select = document.getElementById('proveedorCiCd');
         if (select) select.addEventListener('change', aplicarUIProveedor);
 
         const form = document.getElementById('appForm');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                const tpError = document.getElementById('tpError');
+                const lengError = document.getElementById('lengError');
+                if (tpError) tpError.style.display = 'none';
+                if (lengError) lengError.style.display = 'none';
 
-        form.addEventListener('submit', (e) => {
-            // Reseteo mensajes custom
-            const tpError = document.getElementById('tpError');
-            const lengError = document.getElementById('lengError');
-            tpError.style.display = 'none';
-            lengError.style.display = 'none';
+                let okCustom = true;
 
-            let okCustom = true;
+                if (!validarRadios('tipoProyecto')) {
+                    if (tpError) tpError.style.display = 'block';
+                    okCustom = false;
+                }
+                if (!validarRadios('lenguaje')) {
+                    if (lengError) lengError.style.display = 'block';
+                    okCustom = false;
+                }
 
-            // radios tipoProyecto y lenguaje (por ser radios en grupo)
-            if (!validarRadios('tipoProyecto')) {
-                tpError.style.display = 'block';
-                okCustom = false;
-            }
-            if (!validarRadios('lenguaje')) {
-                lengError.style.display = 'block';
-                okCustom = false;
-            }
+                if (!form.checkValidity() || !okCustom) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
 
-            // Validación HTML5
-            if (!form.checkValidity() || !okCustom) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
+                form.classList.add('was-validated');
+            });
+        }
 
-            form.classList.add('was-validated');
-        });
+        setupIntroJsNuevaApp();
     });
 </script>
 

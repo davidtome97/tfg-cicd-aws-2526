@@ -2,10 +2,14 @@
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>Paso 6 – Comprobar despliegue en EC2</title>
+    <title>Paso 6 – Despliegue en EC2</title>
 
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
 
     <meta name="appId" th:content="${appId}">
 </head>
@@ -30,51 +34,123 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" id="tutorial_root" style="margin-bottom: 70px;">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="mb-0">Paso 6 – Comprobar despliegue en EC2</h2>
+        <h2 class="mb-0">Paso 6 – Despliegue en EC2</h2>
 
-        <a href="/manuales/paso_5.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
+        <div class="d-flex gap-2">
+            <a href="/manuales/paso_5.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Ver guía de este paso
+            </a>
+
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
     </div>
 
-    <p class="text-muted">
-        Se comprueba que la aplicación desplegada en una instancia EC2
-        responde correctamente mediante una petición HTTP.
+    <p class="text-muted" id="intro_texto">
+        En este paso se guardan las variables necesarias para desplegar en una instancia EC2.
+        La llave SSH es un <b>secreto</b> y no se precarga por seguridad.
     </p>
 
-    <div class="card p-4 shadow-sm">
+    <div class="card p-4 shadow-sm" id="card_paso6">
 
-        <div class="mb-3">
-            <label class="form-label">IP o dominio de EC2</label>
-            <input id="host" class="form-control" placeholder="Ej: 52.48.61.1">
-            <div class="form-text">
-                IP pública o dominio. No incluyas <code>http://</code> ni <code>https://</code>.
+        <!-- =========================
+             VARIABLES EC2 (GUARDAR)
+             ========================= -->
+
+        <div class="row g-3">
+
+            <!-- EC2_HOST -->
+            <div class="col-12 col-md-7" id="ec2_host_container">
+                <label class="form-label">EC2_HOST</label>
+                <input id="ec2Host"
+                       class="form-control"
+                       placeholder="Ej: 52.48.61.1 o mi-dominio.com"
+                       th:value="${app != null ? app.ec2Host : ''}"
+                       autocomplete="off">
+                <div class="form-text">
+                    IP pública o dominio. Sin <code>http://</code> ni <code>https://</code>.
+                </div>
             </div>
+
+            <!-- EC2_USER -->
+            <div class="col-12 col-md-5" id="ec2_user_container">
+                <label class="form-label">EC2_USER</label>
+                <input id="ec2User"
+                       class="form-control"
+                       placeholder="Ej: ubuntu"
+                       th:value="${app != null ? app.ec2User : ''}"
+                       autocomplete="off">
+                <div class="form-text">
+                    Usuario SSH típico: <code>ubuntu</code> (Ubuntu), <code>ec2-user</code> (Amazon Linux).
+                </div>
+            </div>
+
+            <!-- APP_PORT -->
+            <div class="col-12 col-md-4" id="app_port_container">
+                <label class="form-label">APP_PORT</label>
+                <input id="appPort"
+                       class="form-control"
+                       placeholder="Ej: 80"
+                       th:value="${app != null && app.appPort != null ? app.appPort : '80'}"
+                       inputmode="numeric"
+                       autocomplete="off">
+                <div class="form-text">
+                    Puerto público donde se accederá a la app.
+                </div>
+            </div>
+
+            <!-- EC2_KNOWN_HOSTS -->
+            <div class="col-12 col-md-8" id="known_hosts_container">
+                <label class="form-label">EC2_KNOWN_HOSTS</label>
+                <textarea id="ec2KnownHosts"
+                          class="form-control"
+                          rows="2"
+                          placeholder="Ej: 52.48.61.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
+                          th:text="${app != null ? app.ec2KnownHosts : ''}"></textarea>
+                <div class="form-text">
+                    Línea(s) de <code>known_hosts</code> para evitar prompts de SSH en CI/CD.
+                </div>
+            </div>
+
+            <!-- EC2_LLAVE_SSH (SECRETO, NO precargar) -->
+            <div class="col-12" id="ssh_key_container">
+                <label class="form-label">EC2_LLAVE_SSH (secreto)</label>
+                <textarea id="ec2LlaveSsh"
+                          class="form-control"
+                          rows="6"
+                          placeholder="Pega aquí la private key (BEGIN OPENSSH PRIVATE KEY...)"
+                          autocomplete="off"></textarea>
+                <div class="form-text">
+                    No se precarga por seguridad. Si el paso ya estaba OK y recargas, tendrás que pegarla de nuevo si quieres verla en el panel.
+                </div>
+            </div>
+
         </div>
 
-        <div class="mb-3">
-            <label class="form-label">Puerto</label>
-            <input id="port" class="form-control" value="80">
-        </div>
-
-        <button type="button" onclick="ejecutarPaso6()" class="btn btn-primary">
-            Comprobar
-        </button>
-
-        <div class="mt-3">
-            <button type="button" id="btnDownloadEC2"
-                    class="btn btn-outline-secondary">
-                Descargar conf EC2 Terminal
+        <div class="mt-4 d-flex flex-wrap gap-2">
+            <button type="button"
+                    onclick="ejecutarPaso6()"
+                    class="btn btn-primary"
+                    id="btn_comprobar">
+                Guardar y comprobar
             </button>
 
-            <div class="form-text mt-1">
-                Comandos necesarios para preparar una EC2
-                (Docker, Docker Compose y AWS CLI).
-            </div>
+            <button type="button"
+                    id="btnDownloadEC2"
+                    class="btn btn-outline-secondary">
+                Descargar conf EC2 (terminal)
+            </button>
+        </div>
+
+        <div class="form-text mt-2">
+            El fichero descarga comandos para preparar una EC2 con Docker, Docker Compose y AWS CLI.
         </div>
 
         <hr>
@@ -89,9 +165,82 @@
             </span>
         </p>
 
-        <p id="mensaje" class="text-muted mb-0"
+        <p id="mensaje"
+           class="text-muted mb-0"
            th:text="${controlPaso != null ? controlPaso.mensaje : ''}">
         </p>
+
+        <!-- ✅ PANEL SECRETS (solo aparece cuando el paso es OK) -->
+        <div id="secretsPanel" class="mt-4" style="display:none;">
+            <hr>
+            <div class="alert alert-success mb-3">
+                ✅ <b>Crea estas variables en tu CI/CD</b> (GitHub/GitLab/Jenkins). La llave SSH se mostrará como “(pegar de nuevo)” si no la has pegado en esta sesión.
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Valor</th>
+                        <th style="width:120px;"></th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td><code>EC2_HOST</code></td>
+                        <td><code id="v_ec2Host"></code></td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="copiarValor('v_ec2Host')">Copiar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>EC2_USER</code></td>
+                        <td><code id="v_ec2User"></code></td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="copiarValor('v_ec2User')">Copiar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>APP_PORT</code></td>
+                        <td><code id="v_appPort"></code></td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="copiarValor('v_appPort')">Copiar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>EC2_KNOWN_HOSTS</code></td>
+                        <td><code id="v_ec2KnownHosts"></code></td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="copiarValor('v_ec2KnownHosts')">Copiar</button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><code>EC2_LLAVE_SSH</code></td>
+                        <td><code id="v_ec2LlaveSsh"></code></td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                    onclick="copiarValor('v_ec2LlaveSsh')">Copiar</button>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-text">
+                <strong>Consejo para crear los Secrets:</strong><br>
+                <ul class="mb-0">
+                    <li><b>GitHub</b> → Settings → Secrets and variables → Actions → New repository secret</li>
+                    <li><b>GitLab</b> → Settings → CI/CD → Variables → Add variable</li>
+                    <li><b>Jenkins</b> → Manage Jenkins → Credentials → (Global/Folder) → Add Credentials</li>
+                </ul>
+            </div>
+        </div>
+
     </div>
 
     <!-- ⚠️ AVISO BLOQUEO -->
@@ -101,21 +250,24 @@
         Debes completar correctamente este paso para finalizar el asistente.
     </div>
 
-    <!-- NAVEGACIÓN CONTROLADA -->
-    <div class="mt-3 d-flex justify-content-between align-items-center">
-        <a th:href="@{/wizard/paso5(appId=${appId})}" class="btn btn-link">
-            &larr; Volver al paso 5
+    <!-- NAVEGACIÓN -->
+    <div class="mt-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
+
+        <a th:href="@{/wizard/paso5(appId=${appId})}"
+           class="btn btn-outline-secondary">
+            ← Volver al paso 5
         </a>
 
-        <div>
-            <button id="btnResumen"
-                    class="btn btn-success"
-                    th:disabled="${!pasoActualCompleto}"
-                    th:onclick="${pasoActualCompleto}
-                        ? 'location.href=\'/wizard/resumen?appId=' + ${appId} + '\''
-                        : null">
+        <div class="text-end">
+            <a id="btnResumen"
+               class="btn btn-outline-secondary"
+               th:classappend="${!pasoActualCompleto} ? ' disabled' : ''"
+               th:href="${pasoActualCompleto}
+                    ? @{/wizard/resumen(appId=${appId})}
+                    : '#'"
+               th:attr="aria-disabled=${!pasoActualCompleto}">
                 Ir al resumen final ✓
-            </button>
+            </a>
 
             <div id="msgBloqueo"
                  th:if="${!pasoActualCompleto}"
@@ -123,86 +275,298 @@
                 Completa este paso para finalizar.
             </div>
         </div>
+
     </div>
 
 </div>
 
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
+
 <script>
-    function getAppId() {
-        const meta = document.querySelector('meta[name="appId"]');
-        if (!meta) throw new Error("appId missing");
-        return meta.getAttribute("content");
-    }
+    /* ======================================================
+       ✅ PASO 6 – EC2
+       - Guarda variables EC2 (EC2_HOST, EC2_USER, APP_PORT, EC2_KNOWN_HOSTS, EC2_LLAVE_SSH)
+       - EC2_LLAVE_SSH es secreto: NO se precarga. Si no lo pegas, en el panel sale "(pegar de nuevo)".
+       - Muestra panel de secrets cuando estado OK
+       - Desbloquea resumen SIN refrescar (btnResumen es <a> con clase disabled)
+       - Evita doble click
+       - Un solo DOMContentLoaded
+       ====================================================== */
 
-    function setEstadoUI(estado, mensaje) {
-        const badge = document.getElementById("estado");
-        const msg = document.getElementById("mensaje");
+    (() => {
+        "use strict";
 
-        badge.textContent = estado || "N/A";
-        msg.textContent = mensaje || "";
+        function getAppId() {
+            const meta = document.querySelector('meta[name="appId"]');
+            if (!meta) throw new Error("appId missing");
+            const v = (meta.getAttribute("content") || "").trim();
+            if (!v) throw new Error("appId empty");
+            return v;
+        }
 
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    }
+        function setEstadoUI(estado, mensaje) {
+            const badge = document.getElementById("estado");
+            const msg = document.getElementById("mensaje");
+            if (!badge || !msg) return;
 
-    (function pintarEstadoInicial() {
-        const badge = document.getElementById("estado");
-        if (!badge) return;
-        const estado = badge.textContent.trim();
+            const st = (estado || "N/A").trim();
+            badge.textContent = st;
+            msg.textContent = mensaje || "";
 
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    })();
+            badge.className =
+                st === "OK" ? "badge bg-success" :
+                    st === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
 
-    async function ejecutarPaso6() {
-        const appId = getAppId();
-        const host = document.getElementById("host").value || "";
-        const port = document.getElementById("port").value || "";
+        function pintarEstadoInicial() {
+            const badge = document.getElementById("estado");
+            if (!badge) return;
 
-        try {
-            setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
+            const estado = (badge.textContent || "").trim();
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
 
-            const url = `/api/wizard/paso5?appId=${encodeURIComponent(appId)}`
-                + `&host=${encodeURIComponent(host)}`
-                + `&port=${encodeURIComponent(port)}`;
+        function limpiarErroresCampos() {
+            ["ec2Host", "ec2User", "appPort", "ec2KnownHosts", "ec2LlaveSsh"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove("is-invalid");
+            });
+        }
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("HTTP " + res.status);
+        function marcarInvalido(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add("is-invalid");
+        }
 
-            const data = await res.json();
-            setEstadoUI(data.estado, data.mensaje);
+        function validarCampos(payload) {
+            let ok = true;
 
-            // ✅ DESBLOQUEO EN CALIENTE
-            if (data.estado === "OK") {
-                const btn = document.getElementById("btnResumen");
-                const msg = document.getElementById("msgBloqueo");
-                const alert = document.getElementById("alertBloqueo");
+            const host = (payload.ec2Host || "").trim();
+            const user = (payload.ec2User || "").trim();
+            const port = (payload.appPort || "").trim();
+            const known = (payload.ec2KnownHosts || "").trim();
 
-                if (btn) {
-                    btn.disabled = false;
-                    btn.onclick = () =>
-                        window.location.href =
-                            `/wizard/resumen?appId=${encodeURIComponent(appId)}`;
-                }
+            if (!host) { ok = false; marcarInvalido("ec2Host"); }
+            if (!user) { ok = false; marcarInvalido("ec2User"); }
+            if (!port) { ok = false; marcarInvalido("appPort"); }
+            if (!known) { ok = false; marcarInvalido("ec2KnownHosts"); }
 
-                if (msg) msg.remove();
-                if (alert) alert.remove();
+            // Validación mínima puerto
+            const nPort = parseInt(port, 10);
+            if (port && (Number.isNaN(nPort) || nPort < 1 || nPort > 65535)) {
+                ok = false;
+                marcarInvalido("appPort");
+                setEstadoUI("KO", "APP_PORT inválido (1-65535).");
+                return false;
             }
 
-        } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 6.");
+            if (!ok) {
+                setEstadoUI("KO", "Debes completar EC2_HOST, EC2_USER, APP_PORT y EC2_KNOWN_HOSTS.");
+            }
+            return ok;
         }
-    }
 
-    /* ===============================
-       DESCARGA CONF EC2 TERMINAL
-       =============================== */
-    document.getElementById("btnDownloadEC2").addEventListener("click", () => {
-        const content = `sudo apt-get update -y
+        function mostrarPanelSecrets(payload) {
+            const panel = document.getElementById("secretsPanel");
+            if (!panel) return;
+
+            const host = (payload.ec2Host || "").trim();
+            const user = (payload.ec2User || "").trim();
+            const port = (payload.appPort || "").trim();
+            const known = (payload.ec2KnownHosts || "").trim();
+            const key  = (payload.ec2LlaveSsh || "").trim();
+
+            const elHost = document.getElementById("v_ec2Host");
+            const elUser = document.getElementById("v_ec2User");
+            const elPort = document.getElementById("v_appPort");
+            const elKnown = document.getElementById("v_ec2KnownHosts");
+            const elKey = document.getElementById("v_ec2LlaveSsh");
+
+            if (elHost) elHost.textContent = host;
+            if (elUser) elUser.textContent = user;
+            if (elPort) elPort.textContent = port;
+            if (elKnown) elKnown.textContent = known;
+
+            // secreto: si no lo han pegado en esta sesión
+            if (elKey) elKey.textContent = key || "(pegar de nuevo)";
+
+            panel.style.display = "block";
+        }
+
+        function ocultarPanelSecrets() {
+            const panel = document.getElementById("secretsPanel");
+            if (panel) panel.style.display = "none";
+        }
+
+        async function copiarValor(elementId) {
+            const el = document.getElementById(elementId);
+            const txt = (el?.textContent || "").trim();
+            if (!txt || txt === "(pegar de nuevo)") return;
+
+            try {
+                await navigator.clipboard.writeText(txt);
+            } catch {
+                const ta = document.createElement("textarea");
+                ta.value = txt;
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand("copy");
+                ta.remove();
+            }
+        }
+
+        function desbloquearResumen(appId) {
+            const btn = document.getElementById("btnResumen");
+            const msg = document.getElementById("msgBloqueo");
+            const alert = document.getElementById("alertBloqueo");
+
+            // btnResumen en tu HTML es <a> con disabled por clase. No es "disabled".
+            if (btn) {
+                btn.classList.remove("disabled");
+                btn.removeAttribute("aria-disabled");
+                btn.href = `/wizard/resumen?appId=${encodeURIComponent(appId)}`;
+            }
+
+            if (msg) msg.remove();
+            if (alert) alert.remove();
+        }
+
+        async function confirmarPaso6(appId, payload) {
+            const headers = {
+                "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+            };
+
+            const body =
+                `appId=${encodeURIComponent(appId)}` +
+                `&ec2Host=${encodeURIComponent(payload.ec2Host)}` +
+                `&ec2User=${encodeURIComponent(payload.ec2User)}` +
+                `&appPort=${encodeURIComponent(payload.appPort)}` +
+                `&ec2KnownHosts=${encodeURIComponent(payload.ec2KnownHosts)}` +
+                `&ec2LlaveSsh=${encodeURIComponent(payload.ec2LlaveSsh)}`;
+
+            const res = await fetch("/wizard/paso6/confirmar", {
+                method: "POST",
+                headers,
+                body
+            });
+
+            if (!res.ok) {
+                throw new Error("Error confirmando paso6. HTTP " + res.status);
+            }
+        }
+
+        async function ejecutarPaso6() {
+            const btn = document.getElementById("btn_comprobar");
+            if (btn) btn.disabled = true;
+
+            try {
+                const appId = getAppId();
+
+                const payload = {
+                    ec2Host: (document.getElementById("ec2Host")?.value || "").trim(),
+                    ec2User: (document.getElementById("ec2User")?.value || "").trim(),
+                    appPort: (document.getElementById("appPort")?.value || "").trim(),
+                    ec2KnownHosts: (document.getElementById("ec2KnownHosts")?.value || "").trim(),
+                    ec2LlaveSsh: (document.getElementById("ec2LlaveSsh")?.value || "").trim()
+                };
+
+                limpiarErroresCampos();
+
+                if (!validarCampos(payload)) {
+                    ocultarPanelSecrets();
+                    return;
+                }
+
+                setEstadoUI("PENDIENTE", "Guardando y comprobando...");
+
+                // Si tu backend hace una comprobación HTTP, aquí podrías llamar /api/wizard/paso6.
+                // Pero como este paso es “variables EC2”, normalmente basta con guardar/confirmar.
+                // Si tienes endpoint, lo dejamos:
+                const url = `/api/wizard/paso6?appId=${encodeURIComponent(appId)}` +
+                    `&host=${encodeURIComponent(payload.ec2Host)}` +
+                    `&port=${encodeURIComponent(payload.appPort)}`;
+
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("HTTP " + res.status);
+
+                const data = await res.json();
+                setEstadoUI(data.estado, data.mensaje);
+
+                if (data.estado === "OK") {
+                    mostrarPanelSecrets(payload);
+                    await confirmarPaso6(appId, payload);
+                    desbloquearResumen(appId);
+                } else {
+                    ocultarPanelSecrets();
+                }
+
+            } catch (e) {
+                ocultarPanelSecrets();
+                setEstadoUI("KO", "Error llamando al backend o confirmando el paso 6.");
+                // console.error(e);
+            } finally {
+                const btn = document.getElementById("btn_comprobar");
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function setupIntroJs() {
+            const btn = document.getElementById("inicio_tutorial");
+            if (!btn) return;
+
+            const steps = [
+                { title: "EC2", intro: "Bienvenido al tutorial del Paso 6. Aquí guardas variables EC2 y generas tus Secrets para el despliegue." },
+                { element: "#ec2_host_container", intro: "EC2_HOST: IP o dominio público de tu instancia." },
+                { element: "#ec2_user_container", intro: "EC2_USER: usuario SSH (ubuntu o ec2-user)." },
+                { element: "#app_port_container", intro: "APP_PORT: puerto público donde accederás a la app." },
+                { element: "#known_hosts_container", intro: "EC2_KNOWN_HOSTS: salida de ssh-keyscan para evitar prompts." },
+                { element: "#ssh_key_container", intro: "EC2_LLAVE_SSH: private key (secreto). No se precarga por seguridad." },
+                { element: "#btn_comprobar", intro: "Pulsa para guardar y comprobar. Si sale OK, verás el panel para copiar variables." },
+                { element: "#secretsPanel", intro: "Panel de variables para crear Secrets en tu CI/CD (puedes copiar y pegar)." },
+                { element: "#btnResumen", intro: "Al estar OK, podrás ir al resumen final." }
+            ];
+
+            btn.addEventListener("click", function () {
+                this.style.animation = "none";
+                introJs().setOptions({
+                    steps,
+                    nextLabel: "Siguiente",
+                    prevLabel: "Anterior",
+                    doneLabel: "Terminar"
+                }).start();
+            });
+        }
+
+        function mostrarPanelSiEstadoOKAlRecargar() {
+            const estado = (document.getElementById("estado")?.textContent || "").trim();
+            if (estado !== "OK") return;
+
+            // Si recargas y ya estaba OK, mostramos panel con todo menos la llave SSH (secreto).
+            const payload = {
+                ec2Host: (document.getElementById("ec2Host")?.value || "").trim(),
+                ec2User: (document.getElementById("ec2User")?.value || "").trim(),
+                appPort: (document.getElementById("appPort")?.value || "").trim(),
+                ec2KnownHosts: (document.getElementById("ec2KnownHosts")?.value || "").trim(),
+                ec2LlaveSsh: "" // no se precarga
+            };
+
+            if (payload.ec2Host && payload.ec2User && payload.appPort && payload.ec2KnownHosts) {
+                mostrarPanelSecrets(payload);
+            }
+        }
+
+        function setupDownloadEC2() {
+            const btn = document.getElementById("btnDownloadEC2");
+            if (!btn) return;
+
+            btn.addEventListener("click", () => {
+                const content =
+                    `sudo apt-get update -y
 sudo apt-get install -y docker.io
 
 sudo systemctl enable --now docker
@@ -223,19 +587,36 @@ aws --version
 aws sts get-caller-identity
 `;
 
-        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
+                const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
 
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "conf-ec2-terminal.txt";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "conf-ec2-terminal.txt";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
 
-        URL.revokeObjectURL(url);
-    });
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        // Exponer funciones usadas desde HTML
+        window.ejecutarPaso6 = ejecutarPaso6;
+        window.copiarValor = copiarValor;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            pintarEstadoInicial();
+            setupIntroJs();
+            setupDownloadEC2();
+            mostrarPanelSiEstadoOKAlRecargar();
+        });
+
+    })();
 </script>
+
+</body>
+</html>
 
 </body>
 </html>

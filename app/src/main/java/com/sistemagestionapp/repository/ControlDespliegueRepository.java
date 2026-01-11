@@ -19,6 +19,11 @@ public interface ControlDespliegueRepository extends JpaRepository<ControlDespli
     // Para el contador "X / 7" en el listado
     long countByAplicacionIdAndEstado(Long aplicacionId, EstadoControl estado);
 
+    long countByAplicacionIdAndPasoInAndEstado(Long aplicacionId,
+                                               java.util.Set<PasoDespliegue> pasos,
+                                               EstadoControl estado);
+
+
     // (Opcional) si quieres detectar el último update
     Optional<ControlDespliegue> findTopByAplicacionIdOrderByFechaEjecucionDesc(Long aplicacionId);
 }

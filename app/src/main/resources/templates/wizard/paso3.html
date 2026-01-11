@@ -7,6 +7,10 @@
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
 
+    <!-- ✅ IntroJS (tutorial guiado) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
+
     <meta name="appId" th:content="${appId}">
 </head>
 
@@ -30,36 +34,55 @@
     </div>
 </nav>
 
-<div class="container">
+<div class="container" id="tutorial_root" style="margin-bottom: 70px;">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h2 class="mb-0">Paso 3 – Comprobar repositorio Git</h2>
 
-        <a href="/manuales/paso_3.pdf" target="_blank"
-           class="btn btn-outline-secondary btn-sm">
-            Ver guía de este paso
-        </a>
+        <div class="d-flex gap-2">
+            <a href="/manuales/paso_3.pdf" target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                Ver guía de este paso
+            </a>
+
+            <!-- ✅ botón tutorial -->
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
     </div>
 
-    <p class="text-muted">
+    <p class="text-muted" id="intro_texto">
         Se verifica que el repositorio indicado existe en GitHub o GitLab
         y que contiene al menos un commit.
     </p>
 
-    <div class="card p-4 shadow-sm">
+    <div class="card p-4 shadow-sm" id="card_paso3">
 
-        <div class="mb-3">
+        <div class="mb-3" id="proveedor_container">
             <label class="form-label">Proveedor</label>
+
+            <!-- ✅ Precargado desde BD -->
             <select id="proveedor" class="form-select">
-                <option value="github">GitHub</option>
-                <option value="gitlab">GitLab</option>
+                <option value="github" th:selected="${proveedor == 'github'}">GitHub</option>
+                <option value="gitlab" th:selected="${proveedor == 'gitlab'}">GitLab</option>
             </select>
         </div>
 
-        <div class="mb-3">
+        <div class="mb-3" id="repo_container">
             <label class="form-label">Repositorio</label>
-            <input id="repo" class="form-control"
-                   placeholder="Ej: davidtome97/tfg-cicd-aws-2526">
+
+            <!-- ✅ Precargado desde BD -->
+            <input id="repoInput"
+                   class="form-control"
+                   name="repo"
+                   th:value="${repoSugerido}"
+                   placeholder="Ej: usuario/repositorio"
+                   autocomplete="off"
+                   required>
+
             <div class="form-text">
                 Formato: <code>owner/repo</code> (GitHub) o
                 <code>grupo/proyecto</code> (GitLab).
@@ -68,7 +91,8 @@
 
         <button type="button"
                 onclick="ejecutarPaso3()"
-                class="btn btn-primary">
+                class="btn btn-primary"
+                id="btn_comprobar">
             Comprobar
         </button>
 
@@ -97,16 +121,19 @@
         Debes completar correctamente este paso antes de continuar al siguiente.
     </div>
 
-    <!-- NAVEGACIÓN -->
-    <div class="mt-3 d-flex justify-content-between align-items-center">
+    <!-- NAVEGACIÓN (mismo diseño, fijos a los extremos) -->
+    <div class="mt-4 mb-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
+
+        <!-- Izquierda -->
         <a th:href="@{/wizard/paso2(appId=${appId})}"
-           class="btn btn-link">
-            &larr; Volver al paso 2
+           class="btn btn-outline-secondary">
+            ← Volver al paso 2
         </a>
 
-        <div>
+        <!-- Derecha -->
+        <div class="text-end">
             <button id="btnPaso4"
-                    class="btn btn-primary"
+                    class="btn btn-outline-secondary"
                     th:disabled="${!pasoActualCompleto}"
                     th:onclick="${pasoActualCompleto}
                         ? 'location.href=\'/wizard/paso4?appId=' + ${appId} + '\''
@@ -120,9 +147,13 @@
                 Completa este paso para poder continuar.
             </div>
         </div>
+
     </div>
 
 </div>
+
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
 
 <script>
     function getAppId() {
@@ -144,6 +175,42 @@
                     "badge bg-secondary";
     }
 
+    function limpiarErroresCampos() {
+        const repo = document.getElementById("repoInput");
+        const prov = document.getElementById("proveedor");
+        if (repo) repo.classList.remove("is-invalid");
+        if (prov) prov.classList.remove("is-invalid");
+    }
+
+    function validarCampos(proveedor, repo) {
+        let ok = true;
+
+        const repoEl = document.getElementById("repoInput");
+        const provEl = document.getElementById("proveedor");
+
+        if (!proveedor.trim()) {
+            ok = false;
+            if (provEl) provEl.classList.add("is-invalid");
+        }
+
+        if (!repo.trim()) {
+            ok = false;
+            if (repoEl) repoEl.classList.add("is-invalid");
+        } else {
+            if (!repo.includes("/") || repo.split("/").length < 2) {
+                ok = false;
+                if (repoEl) repoEl.classList.add("is-invalid");
+                setEstadoUI("KO", "Formato inválido. Usa owner/repo (GitHub) o grupo/proyecto (GitLab).");
+                return false;
+            }
+        }
+
+        if (!ok) {
+            setEstadoUI("KO", "Debes completar Proveedor y Repositorio para comprobar.");
+        }
+        return ok;
+    }
+
     (function pintarEstadoInicial() {
         const badge = document.getElementById("estado");
         if (!badge) return;
@@ -155,10 +222,54 @@
                     "badge bg-secondary";
     })();
 
+    function desbloquearPaso4(appId) {
+        const btn = document.getElementById("btnPaso4");
+        const msg = document.getElementById("msgBloqueo");
+        const alert = document.getElementById("alertBloqueo");
+
+        if (btn) {
+            btn.disabled = false;
+            btn.onclick = () =>
+                window.location.href =
+                    `/wizard/paso4?appId=${encodeURIComponent(appId)}`;
+        }
+
+        if (msg) msg.remove();
+        if (alert) alert.remove();
+    }
+
+    // ✅ (recomendado) confirma en backend que el paso está OK y guarda proveedor/repo si quieres
+    async function confirmarPaso3(appId, proveedor, repo) {
+        const headers = {
+            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+        };
+
+        const body =
+            `appId=${encodeURIComponent(appId)}` +
+            `&proveedor=${encodeURIComponent(proveedor)}` +
+            `&repo=${encodeURIComponent(repo)}`;
+
+        const res = await fetch("/wizard/paso3/confirmar", {
+            method: "POST",
+            headers,
+            body
+        });
+
+        // Si aún no has creado el endpoint, esto fallará.
+        // En ese caso comenta la llamada a confirmarPaso3(...) en ejecutarPaso3().
+        if (!res.ok) {
+            throw new Error("Error confirmando paso3. HTTP " + res.status);
+        }
+    }
+
     async function ejecutarPaso3() {
         const appId = getAppId();
-        const proveedor = document.getElementById("proveedor").value || "";
-        const repo = document.getElementById("repo").value || "";
+        const proveedor = (document.getElementById("proveedor")?.value || "").trim();
+        const repo = (document.getElementById("repoInput")?.value || "").trim();
+
+        limpiarErroresCampos();
+
+        if (!validarCampos(proveedor, repo)) return;
 
         try {
             setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
@@ -173,107 +284,56 @@
             const data = await res.json();
             setEstadoUI(data.estado, data.mensaje);
 
-            // ✅ DESBLOQUEAR PASO 4 SIN RECARGAR
             if (data.estado === "OK") {
-                const btn = document.getElementById("btnPaso4");
-                const msg = document.getElementById("msgBloqueo");
-                const alert = document.getElementById("alertBloqueo");
-
-                if (btn) {
-                    btn.disabled = false;
-                    btn.onclick = () =>
-                        window.location.href =
-                            `/wizard/paso4?appId=${encodeURIComponent(appId)}`;
-                }
-
-                if (msg) msg.remove();
-                if (alert) alert.remove();
+                await confirmarPaso3(appId, proveedor, repo);
+                desbloquearPaso4(appId);
             }
 
         } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 3.");
+            setEstadoUI("KO", "Error llamando al backend o confirmando el paso 3.");
         }
     }
-</script>
 
-</body>
-</html>
-
-</div>
-
-<script>
-    function getAppId() {
-        const meta = document.querySelector('meta[name="appId"]');
-        const appId = meta ? meta.getAttribute("content") : null;
-        if (!appId) {
-            alert("Falta appId. Vuelve al listado y entra al asistente.");
-            throw new Error("appId missing");
-        }
-        return appId;
-    }
-
-    function setEstadoUI(estado, mensaje) {
-        const badge = document.getElementById("estado");
-        const msg = document.getElementById("mensaje");
-
-        badge.innerText = estado || "N/A";
-        msg.innerText = mensaje || "";
-
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    }
-
-    (function pintarEstadoInicial() {
-        const badge = document.getElementById("estado");
-        if (!badge) return;
-        const estado = badge.textContent.trim();
-
-        badge.className =
-            estado === "OK" ? "badge bg-success" :
-                estado === "KO" ? "badge bg-danger" :
-                    "badge bg-secondary";
-    })();
-
-    async function ejecutarPaso3() {
-        const appId = getAppId();
-        const proveedor = document.getElementById("proveedor").value || "";
-        const repo = document.getElementById("repo").value || "";
-
-        try {
-            setEstadoUI("PENDIENTE", "Ejecutando comprobación...");
-
-            const url = `/api/wizard/paso3?appId=${encodeURIComponent(appId)}`
-                + `&proveedor=${encodeURIComponent(proveedor)}`
-                + `&repo=${encodeURIComponent(repo)}`;
-
-            const res = await fetch(url);
-            if (!res.ok) throw new Error("HTTP " + res.status);
-
-            const data = await res.json();
-            setEstadoUI(data.estado, data.mensaje);
-
-            // ✅ HABILITAR BOTÓN "IR AL PASO 4" SIN RECARGAR
-            if (data.estado === "OK") {
-                const btn = document.getElementById("btnPaso4");
-                const msg = document.getElementById("msgBloqueo");
-
-                if (btn) {
-                    btn.disabled = false;
-                    btn.onclick = () => {
-                        window.location.href =
-                            `/wizard/paso4?appId=${encodeURIComponent(appId)}`;
-                    };
-                }
-
-                if (msg) msg.remove();
+    /* ======================================================
+       ✅ INTROJS (mismo patrón que el ejemplo del profesor)
+       ====================================================== */
+    document.addEventListener('DOMContentLoaded', function () {
+        let steps = [
+            {
+                title: "REPOSITORIO GIT",
+                intro: "Bienvenido al tutorial del Paso 3. Aquí compruebas que el repositorio existe (GitHub/GitLab) y que tiene al menos un commit."
+            },
+            {
+                element: '#proveedor_container',
+                intro: "Selecciona el proveedor donde está tu repo: GitHub o GitLab."
+            },
+            {
+                element: '#repo_container',
+                intro: "Escribe el repositorio con el formato correcto: owner/repo (GitHub) o grupo/proyecto (GitLab)."
+            },
+            {
+                element: '#btn_comprobar',
+                intro: "Pulsa aquí para comprobar el repositorio. Si sale OK, se desbloqueará el Paso 4."
+            },
+            {
+                element: '#btnPaso4',
+                intro: "Cuando el paso esté en OK, podrás continuar al Paso 4."
             }
+        ];
 
-        } catch (e) {
-            setEstadoUI("KO", "Error llamando al backend en el paso 3.");
-        }
-    }
+        const btn = document.getElementById('inicio_tutorial');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            this.style.animation = "none";
+            introJs().setOptions({
+                steps: steps,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Terminar",
+            }).start();
+        });
+    });
 </script>
 
 </body>
