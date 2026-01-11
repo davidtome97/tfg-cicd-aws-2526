@@ -101,7 +101,7 @@ jobs:
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
 
           echo "Building image: ${IMAGE_URI}"
-          docker build -t "${IMAGE_URI}" -f app/Dockerfile app
+          docker build -t "${IMAGE_URI}" -f Dockerfile .
 
           echo "Tagging latest..."
           docker tag "${IMAGE_URI}" "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
