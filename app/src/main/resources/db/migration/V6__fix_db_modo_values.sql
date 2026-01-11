@@ -1,9 +1,18 @@
--- Ver qué valores hay (opcional, útil para debug)
--- SELECT DISTINCT db_modo FROM aplicacion;
+ALTER TABLE aplicacion
+    ADD COLUMN IF NOT EXISTS db_modo VARCHAR(20);
 
--- Normalizar a enum nuevo
-UPDATE aplicacion SET db_modo = 'LOCAL'  WHERE db_modo IN ('local', 'LOCAL');
-UPDATE aplicacion SET db_modo = 'REMOTE' WHERE db_modo IN ('remote','REMOTE');
+UPDATE aplicacion
+SET db_modo = 'LOCAL'
+WHERE db_modo IS NULL OR TRIM(db_modo) = '';
 
--- Si hay nulls, pon LOCAL por defecto
-UPDATE aplicacion SET db_modo = 'LOCAL' WHERE db_modo IS NULL;
+-- Normaliza posibles valores viejos
+UPDATE aplicacion
+SET db_modo = 'REMOTE'
+WHERE UPPER(TRIM(db_modo)) IN ('REMOTO', 'RDS', 'CLOUD');
+
+ALTER TABLE aplicacion
+DROP CONSTRAINT IF EXISTS aplicacion_db_modo_check;
+
+ALTER TABLE aplicacion
+    ADD CONSTRAINT aplicacion_db_modo_check
+        CHECK (db_modo IS NULL OR db_modo IN ('LOCAL', 'REMOTE'));

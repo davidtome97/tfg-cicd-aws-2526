@@ -1,2 +1,1 @@
-ALTER TABLE aplicacion
-ALTER COLUMN sonar_token TYPE TEXT;
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS sonar_token TEXT;

@@ -1,7 +1,3 @@
--- Convertir sonar_token a TEXT si aún fuese OID/LOB (y preservar contenido si existe)
-ALTER TABLE aplicacion
-ALTER COLUMN sonar_token TYPE TEXT;
-
--- Convertir aws_secret_access_key a TEXT (igual)
-ALTER TABLE aplicacion
-ALTER COLUMN aws_secret_access_key TYPE TEXT;
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS github_token TEXT;
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS gitlab_token TEXT;
+-- si aquí estabas cambiando tipos: en Postgres “TEXT” ya te vale, no fuerces ALTER TYPE si no hace falta
