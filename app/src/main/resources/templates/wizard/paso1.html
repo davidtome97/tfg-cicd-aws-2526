@@ -39,9 +39,11 @@
         <h2>Paso 1 – Configuración de SonarCloud</h2>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_1.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_1.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <button id="inicio_tutorial"
@@ -402,13 +404,70 @@
             if (!btn) return;
 
             const steps = [
-                { title: "SONARCLOUD", intro: "Bienvenido al tutorial del Paso 1. Aquí rellenas las variables para tus Secrets y validas SonarCloud." },
-                { element: "#sonarhost_container", intro: "SONAR_HOST_URL: URL de SonarCloud. En este asistente viene predefinida: https://sonarcloud.io" },
-                { element: "#sonarorg_container", intro: "SONAR_ORGANIZATION: organización en SonarCloud (se ve en la URL o en el panel del proyecto)." },
-                { element: "#sonarproject_container", intro: "SONAR_PROJECT_KEY: clave del proyecto. Se usa para la comprobación." },
-                { element: "#sonartoken_container", intro: "SONAR_TOKEN: token generado en SonarCloud. Se usa para la comprobación." },
-                { element: "#btn_comprobar", intro: "Pulsa aquí para comprobar. Si sale OK, aparecerá un panel con las 4 variables y sus valores para crear los Secrets." },
-                { element: "#secretsPanel", intro: "Aquí verás las variables y sus valores. Puedes copiarlas y pegarlas en Secrets." }
+                {
+                    title: "SONARCLOUD",
+                    intro: `
+            Bienvenido al tutorial del <b>Paso 1</b>.<br><br>
+            Aquí configurarás las variables necesarias para integrar tu proyecto
+            con <b>SonarCloud</b> y validarlas correctamente.
+        `
+                },
+                {
+                    element: "#btnGuiaPaso",
+                    title: "📘 Guía del paso (MUY IMPORTANTE)",
+                    intro: `
+            <b>Empieza siempre por aquí.</b><br><br>
+            Descarga y lee la guía de este paso antes de rellenar nada.
+            Te explica cómo obtener los datos correctos en SonarCloud.
+        `,
+                    position: "bottom"
+                },
+                {
+                    element: "#sonarhost_container",
+                    intro: `
+            <b>SONAR_HOST_URL</b><br>
+            URL de SonarCloud.<br>
+            En este asistente viene predefinida: <code>https://sonarcloud.io</code>
+        `
+                },
+                {
+                    element: "#sonarorg_container",
+                    intro: `
+            <b>SONAR_ORGANIZATION</b><br>
+            Nombre de tu organización en SonarCloud.<br>
+            Se ve en la URL o en el panel del proyecto.
+        `
+                },
+                {
+                    element: "#sonarproject_container",
+                    intro: `
+            <b>SONAR_PROJECT_KEY</b><br>
+            Clave única del proyecto en SonarCloud.<br>
+            Se usa para la comprobación.
+        `
+                },
+                {
+                    element: "#sonartoken_container",
+                    intro: `
+            <b>SONAR_TOKEN</b><br>
+            Token generado en SonarCloud.<br>
+            Se usará como <b>Secret</b>.
+        `
+                },
+                {
+                    element: "#btn_comprobar",
+                    intro: `
+            Pulsa aquí para comprobar los datos.<br>
+            Si todo es correcto, el paso se marcará como <b>OK</b>.
+        `
+                },
+                {
+                    element: "#secretsPanel",
+                    intro: `
+            Aquí verás las <b>4 variables</b> con sus valores.<br>
+            Cópialas y pégalas en los <b>Secrets</b> de tu CI/CD.
+        `
+                }
             ];
 
             btn.addEventListener("click", function () {

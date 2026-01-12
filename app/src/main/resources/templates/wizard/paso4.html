@@ -40,9 +40,11 @@
         <h2 class="mb-0">Paso 4 – Configurar variables AWS + comprobar imagen en ECR</h2>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_4.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_4.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <button id="inicio_tutorial"
@@ -496,39 +498,85 @@
         let steps = [
             {
                 title: "AWS + ECR",
-                intro: "Bienvenido al tutorial del Paso 4. Aquí introduces las variables de AWS (Secrets) y compruebas que existe la imagen en ECR."
+                intro: `
+            Bienvenido al <b>Paso 4</b> del asistente.<br><br>
+            En este paso introducirás las <b>credenciales de AWS</b>
+            y comprobarás que existe una <b>imagen Docker</b>
+            en Amazon <b>ECR</b>.
+        `
             },
             {
-                element: '#ecr_repo_container',
-                intro: "ECR_REPOSITORY: nombre del repositorio en Amazon ECR (sin URL)."
+                element: "#btnGuiaPaso",
+                title: "📘 Guía del paso (MUY IMPORTANTE)",
+                intro: `
+            Antes de continuar, descarga y lee la guía de este paso.<br><br>
+            Explica cómo obtener las credenciales de AWS,
+            cómo identificar tu repositorio ECR
+            y los errores más comunes.
+        `,
+                position: "bottom"
             },
             {
-                element: '#aws_region_container',
-                intro: "AWS_REGION: región donde está tu ECR (por ejemplo eu-west-1)."
+                element: "#ecr_repo_container",
+                intro: `
+            <b>ECR_REPOSITORY</b><br>
+            Nombre del repositorio en Amazon ECR.<br>
+            <u>No</u> incluyas la URL completa, solo el nombre.
+        `
             },
             {
-                element: '#aws_account_container',
-                intro: "AWS_ACCOUNT_ID: tu ID de cuenta AWS (12 dígitos)."
+                element: "#aws_region_container",
+                intro: `
+            <b>AWS_REGION</b><br>
+            Región donde está tu repositorio ECR
+            (por ejemplo <code>eu-west-1</code>).
+        `
             },
             {
-                element: '#aws_access_container',
-                intro: "AWS_ACCESS_KEY_ID: clave de acceso de tu usuario IAM (se guarda como Secret)."
+                element: "#aws_account_container",
+                intro: `
+            <b>AWS_ACCOUNT_ID</b><br>
+            ID de tu cuenta AWS (12 dígitos).
+        `
             },
             {
-                element: '#aws_secret_container',
-                intro: "AWS_SECRET_ACCESS_KEY: clave secreta (queda oculta). Puedes copiarla con el botón Copiar."
+                element: "#aws_access_container",
+                intro: `
+            <b>AWS_ACCESS_KEY_ID</b><br>
+            Clave de acceso del usuario IAM.<br>
+            Se guardará como <b>Secret</b>.
+        `
             },
             {
-                element: '#image_tag_container',
-                intro: "IMAGE_TAG: tag de la imagen a comprobar en ECR (latest, v1.0.0, etc.)."
+                element: "#aws_secret_container",
+                intro: `
+            <b>AWS_SECRET_ACCESS_KEY</b><br>
+            Clave secreta del usuario IAM.<br>
+            Se muestra oculta y se guarda como <b>Secret</b>.
+        `
             },
             {
-                element: '#btn_comprobar',
-                intro: "Pulsa aquí para comprobar. Si sale OK, se guardan las variables y aparece una tabla para copiarlas como Secrets."
+                element: "#image_tag_container",
+                intro: `
+            <b>IMAGE_TAG</b><br>
+            Tag de la imagen Docker a comprobar en ECR
+            (<code>latest</code>, <code>v1.0.0</code>, etc.).
+        `
             },
             {
-                element: '#btnPaso5',
-                intro: "Cuando el estado esté en OK, podrás continuar al Paso 5."
+                element: "#btn_comprobar",
+                intro: `
+            Pulsa aquí para comprobar que la imagen existe en ECR.<br>
+            Si todo es correcto, el paso se marcará como <b>OK</b>
+            y aparecerán las variables para copiarlas como <b>Secrets</b>.
+        `
+            },
+            {
+                element: "#btnPaso5",
+                intro: `
+            Cuando el estado esté en <b>OK</b>,
+            podrás continuar al <b>Paso 5</b> del asistente.
+        `
             }
         ];
 

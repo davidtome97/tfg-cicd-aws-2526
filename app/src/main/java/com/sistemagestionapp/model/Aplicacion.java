@@ -138,8 +138,7 @@ public class Aplicacion {
     /* =========================
        METADATOS
        ========================= */
-
-    @Column(name = "fecha_creacion")
+    @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -165,6 +164,16 @@ public class Aplicacion {
     @Column(name = "app_port")
     private Integer appPort;
 
+
+
+    @PrePersist
+    public void prePersist() {
+        if (fechaCreacion == null) {
+            fechaCreacion = LocalDateTime.now();
+        }
+    }
+
+
     /* =========================
        RELACIONES
        ========================= */
@@ -183,13 +192,6 @@ public class Aplicacion {
     public Aplicacion() {
     }
 
-    @PrePersist
-    public void prePersist() {
-        if (fechaCreacion == null) {
-            fechaCreacion = LocalDateTime.now();
-        }
-        normalizarDefaults();
-    }
 
     @PreUpdate
     public void preUpdate() {

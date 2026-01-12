@@ -40,9 +40,11 @@
         <h2 class="mb-0">Paso 6 – Despliegue en EC2</h2>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_5.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_6.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <button id="inicio_tutorial"
@@ -68,8 +70,9 @@
 
             <!-- EC2_HOST -->
             <div class="col-12 col-md-7" id="ec2_host_container">
-                <label class="form-label">EC2_HOST</label>
+                <label class="form-label" for="ec2Host">EC2_HOST</label>
                 <input id="ec2Host"
+                       name="ec2Host"
                        class="form-control"
                        placeholder="Ej: 52.48.61.1 o mi-dominio.com"
                        th:value="${app != null ? app.ec2Host : ''}"
@@ -81,8 +84,9 @@
 
             <!-- EC2_USER -->
             <div class="col-12 col-md-5" id="ec2_user_container">
-                <label class="form-label">EC2_USER</label>
+                <label class="form-label" for="ec2User">EC2_USER</label>
                 <input id="ec2User"
+                       name="ec2User"
                        class="form-control"
                        placeholder="Ej: ubuntu"
                        th:value="${app != null ? app.ec2User : ''}"
@@ -94,11 +98,12 @@
 
             <!-- APP_PORT -->
             <div class="col-12 col-md-4" id="app_port_container">
-                <label class="form-label">APP_PORT</label>
+                <label class="form-label" for="appPort">APP_PORT</label>
                 <input id="appPort"
+                       name="appPort"
                        class="form-control"
-                       placeholder="Ej: 80"
-                       th:value="${app != null && app.appPort != null ? app.appPort : '80'}"
+                       placeholder="Ej: 8081"
+                       th:value="${appPort != null ? appPort : 8081}"
                        inputmode="numeric"
                        autocomplete="off">
                 <div class="form-text">
@@ -108,8 +113,9 @@
 
             <!-- EC2_KNOWN_HOSTS -->
             <div class="col-12 col-md-8" id="known_hosts_container">
-                <label class="form-label">EC2_KNOWN_HOSTS</label>
+                <label class="form-label" for="ec2KnownHosts">EC2_KNOWN_HOSTS</label>
                 <textarea id="ec2KnownHosts"
+                          name="ec2KnownHosts"
                           class="form-control"
                           rows="2"
                           placeholder="Ej: 52.48.61.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
@@ -121,8 +127,9 @@
 
             <!-- EC2_LLAVE_SSH (SECRETO, NO precargar) -->
             <div class="col-12" id="ssh_key_container">
-                <label class="form-label">EC2_LLAVE_SSH (secreto)</label>
+                <label class="form-label" for="ec2LlaveSsh">EC2_LLAVE_SSH (secreto)</label>
                 <textarea id="ec2LlaveSsh"
+                          name="ec2LlaveSsh"
                           class="form-control"
                           rows="6"
                           placeholder="Pega aquí la private key (BEGIN OPENSSH PRIVATE KEY...)"
@@ -520,15 +527,63 @@
             if (!btn) return;
 
             const steps = [
-                { title: "EC2", intro: "Bienvenido al tutorial del Paso 6. Aquí guardas variables EC2 y generas tus Secrets para el despliegue." },
-                { element: "#ec2_host_container", intro: "EC2_HOST: IP o dominio público de tu instancia." },
-                { element: "#ec2_user_container", intro: "EC2_USER: usuario SSH (ubuntu o ec2-user)." },
-                { element: "#app_port_container", intro: "APP_PORT: puerto público donde accederás a la app." },
-                { element: "#known_hosts_container", intro: "EC2_KNOWN_HOSTS: salida de ssh-keyscan para evitar prompts." },
-                { element: "#ssh_key_container", intro: "EC2_LLAVE_SSH: private key (secreto). No se precarga por seguridad." },
-                { element: "#btn_comprobar", intro: "Pulsa para guardar y comprobar. Si sale OK, verás el panel para copiar variables." },
-                { element: "#secretsPanel", intro: "Panel de variables para crear Secrets en tu CI/CD (puedes copiar y pegar)." },
-                { element: "#btnResumen", intro: "Al estar OK, podrás ir al resumen final." }
+                {
+                    title: "PASO 6: DESPLIEGUE EN EC2",
+                    intro: `
+            Bienvenido al <b>Paso 6</b>.<br><br>
+            En este paso configuras las variables necesarias para desplegar
+            tu aplicación en una instancia <b>EC2</b> y generar los <b>Secrets</b>
+            finales del pipeline.
+        `
+                },
+                {
+                    element: "#btnGuiaPaso",
+                    title: "📘 Guía del paso (IMPRESCINDIBLE)",
+                    intro: `
+            Antes de rellenar nada, descarga y lee la guía.<br><br>
+            Explica cómo preparar la EC2, generar la llave SSH,
+            obtener <code>known_hosts</code> y evitar errores de conexión.
+        `,
+                    position: "bottom"
+                },
+                {
+                    element: "#ec2_host_container",
+                    intro: "EC2_HOST: IP pública o dominio de tu instancia EC2."
+                },
+                {
+                    element: "#ec2_user_container",
+                    intro: "EC2_USER: usuario SSH (normalmente <b>ubuntu</b> o <b>ec2-user</b>)."
+                },
+                {
+                    element: "#app_port_container",
+                    intro: "APP_PORT: puerto público donde se accederá a tu aplicación."
+                },
+                {
+                    element: "#known_hosts_container",
+                    intro: "EC2_KNOWN_HOSTS: salida de <code>ssh-keyscan</code> para evitar prompts interactivos en CI/CD."
+                },
+                {
+                    element: "#ssh_key_container",
+                    intro: `
+            EC2_LLAVE_SSH: clave privada SSH.<br><br>
+            Es un <b>secreto</b>, no se precarga por seguridad.
+        `
+                },
+                {
+                    element: "#btn_comprobar",
+                    intro: `
+            Pulsa aquí para guardar y comprobar.<br><br>
+            Si todo es correcto, el paso quedará en <b>OK</b>.
+        `
+                },
+                {
+                    element: "#secretsPanel",
+                    intro: "Aquí verás las variables finales para crear los Secrets en tu CI/CD."
+                },
+                {
+                    element: "#btnResumen",
+                    intro: "Cuando el paso esté en <b>OK</b>, podrás ir al resumen final del asistente."
+                }
             ];
 
             btn.addEventListener("click", function () {

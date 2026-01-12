@@ -50,9 +50,11 @@
         </div>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_5.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_5.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <button id="inicio_tutorial"
@@ -277,18 +279,15 @@
             ← Volver al paso 4
         </a>
 
-        <div class="text-end">
-            <!-- ✅ COMPLETO: link normal -->
-            <a th:if="${pasoActualCompleto}"
-               id="btnPaso6_ok"
-               class="btn btn-outline-secondary"
+        <div class="text-end" id="navPaso6">
+
+            <a id="btnPaso6_ok"
+               class="btn btn-outline-secondary d-none"
                th:href="@{/wizard/paso6(appId=${appId})}">
                 Ir al paso 6 →
             </a>
 
-            <!-- ✅ NO COMPLETO: link visualmente deshabilitado -->
-            <a th:if="${!pasoActualCompleto}"
-               id="btnPaso6_ko"
+            <a id="btnPaso6_ko"
                class="btn btn-outline-secondary disabled"
                href="#"
                aria-disabled="true">
@@ -296,10 +295,10 @@
             </a>
 
             <div id="msgBloqueo"
-                 th:if="${!pasoActualCompleto}"
                  class="form-text text-danger mt-1">
                 Genera las variables para continuar.
             </div>
+
         </div>
     </div>
 
@@ -447,7 +446,6 @@
     /* =========================
        PASO 6 NAV (HTML NUEVO: btnPaso6_ok / btnPaso6_ko)
     ========================= */
-
     function desbloquearPaso6() {
         const appId = getAppId();
 
@@ -456,18 +454,18 @@
         const msg = document.getElementById("msgBloqueo");
         const alert = document.getElementById("alertBloqueo");
 
-        // Si existe el KO (link disabled) lo ocultamos
-        if (btnKo) btnKo.style.display = "none";
-
-        // Si existe el OK lo mostramos
+        if (btnKo) btnKo.classList.add("d-none");
         if (btnOk) {
-            btnOk.style.display = "inline-block";
-            // por si el href viniera mal, lo reafirmamos
+            btnOk.classList.remove("d-none");
             if (appId) btnOk.setAttribute("href", `/wizard/paso6?appId=${encodeURIComponent(appId)}`);
         }
 
-        if (msg) msg.remove();
+        if (msg) msg.classList.add("d-none");
         if (alert) alert.remove();
+
+        // opcional: actualizar el atributo del DOM por coherencia
+        const root = document.getElementById("tutorial_root");
+        if (root) root.setAttribute("data-paso-completo", "true");
     }
 
     /* =========================
@@ -733,21 +731,42 @@
     ========================= */
 
     document.addEventListener("DOMContentLoaded", () => {
+        // listeners selects
         document.getElementById("mode")?.addEventListener("change", onModeOrEngineChange);
         document.getElementById("engine")?.addEventListener("change", onModeOrEngineChange);
         onModeOrEngineChange();
 
+        // listeners botones
         document.getElementById("btnContinuar")?.addEventListener("click", continuar);
         document.getElementById("btnGenerarVariables")?.addEventListener("click", generarVariables);
         document.getElementById("btn_pdf_repeat")?.addEventListener("click", descargarPdfOpcional);
 
-        // Si backend dice que ya estaba completo: muestra step2 y desbloquea paso 6
-        if (isPasoCompletoFromDom()) {
+        // ===== Estado inicial (backend) =====
+        const completo = isPasoCompletoFromDom();
+
+        // Si ya estaba completo, mostramos step2 (para que pueda ver tabla/credenciales) y marcamos nav
+        if (completo) {
             showStep2();
+            // opcional: si quieres mantener tu función (elimina alertas, etc.)
             desbloquearPaso6();
         }
 
-        // Badge inicial (por si viene OK/KO/PENDIENTE)
+        // ===== Forzar estado visual de navegación Paso 6 (evita duplicados) =====
+        const btnOk = document.getElementById("btnPaso6_ok");
+        const btnKo = document.getElementById("btnPaso6_ko");
+        const msg = document.getElementById("msgBloqueo");
+
+        if (completo) {
+            btnOk?.classList.remove("d-none");
+            btnKo?.classList.add("d-none");
+            msg?.classList.add("d-none");
+        } else {
+            btnOk?.classList.add("d-none");
+            btnKo?.classList.remove("d-none");
+            msg?.classList.remove("d-none");
+        }
+
+        // ===== Badge inicial (por si viene OK/KO/PENDIENTE) =====
         const badge = document.getElementById("estado");
         if (badge) {
             const estado = badge.textContent.trim();
@@ -771,23 +790,47 @@
             const engine = (document.getElementById("engine")?.value || "postgres").trim();
 
             const steps = [
-                { title: "PASO 5: BASE DE DATOS", intro: "Elige <b>modo</b> y <b>motor</b>. Completa credenciales y pulsa <b>Generar variables</b> para marcar el paso como OK." },
+                {
+                    title: "PASO 5: BASE DE DATOS",
+                    intro: `
+            Bienvenido al <b>Paso 5</b>.<br><br>
+            Aquí configurarás la <b>base de datos</b>:
+            eliges <b>modo</b> y <b>motor</b>, completas credenciales
+            y pulsas <b>Generar variables</b> para marcar el paso como <b>OK</b>.
+        `
+                },
+                {
+                    element: "#btnGuiaPaso",
+                    title: "📘 Guía del paso (MUY IMPORTANTE)",
+                    intro: `
+            Antes de continuar, descarga y lee la guía.<br><br>
+            Explica la diferencia entre <b>local</b> y <b>remote</b>,
+            qué valores poner y cómo evitar errores de conexión.
+        `,
+                    position: "bottom"
+                },
                 { element: "#mode_container", intro: "1) Elige <b>local</b> o <b>remote</b>." },
-                { element: "#engine_container", intro: "2) Selecciona el motor." },
-                { element: "#port_container", intro: "3) Puerto opcional (si vacío, usa el por defecto)." },
-                ...(mode === "remote" ? [{
-                    element: "#remote_link_container",
-                    intro: engine === "mongo"
-                        ? "4) Remote + Mongo: pega la conexión (DB_URI). Obligatoria."
-                        : "4) Remote + SQL: pega el endpoint (DB_HOST). Obligatorio."
-                }] : []),
+                { element: "#engine_container", intro: "2) Selecciona el motor de base de datos." },
+                { element: "#port_container", intro: "3) Puerto opcional (si lo dejas vacío, se usa el puerto por defecto)." },
+
+                ...(mode === "remote"
+                    ? [{
+                        element: "#remote_link_container",
+                        intro: engine === "mongo"
+                            ? "4) Remote + Mongo: pega la conexión completa (DB_URI). Es obligatoria."
+                            : "4) Remote + SQL: pega el endpoint/host (DB_HOST). Es obligatorio."
+                    }]
+                    : []),
+
                 { element: "#btnContinuar", intro: "5) Pulsa continuar para ver los campos de credenciales." },
                 { element: "#db_name_container", intro: "6) DB_NAME (obligatorio)." },
                 { element: "#db_user_container", intro: "7) DB_USER (obligatorio)." },
-                { element: "#db_pass_container", intro: "8) DB_PASSWORD (obligatorio, secret)." },
-                { element: "#btnGenerarVariables", intro: "9) Genera las variables: se guardará y marcará OK." },
-                // el paso 6 puede estar en btnPaso6_ok o btnPaso6_ko según estado
-                ...(document.querySelector("#btnPaso6_ok") ? [{ element: "#btnPaso6_ok", intro: "Paso 6 se desbloquea cuando el paso esté OK." }] : [])
+                { element: "#db_pass_container", intro: "8) DB_PASSWORD (obligatorio, se guarda como <b>secret</b>)." },
+                { element: "#btnGenerarVariables", intro: "9) Genera las variables: se guardará la configuración y el paso quedará en <b>OK</b>." },
+
+                ...(document.querySelector("#btnPaso6_ok")
+                    ? [{ element: "#btnPaso6_ok", intro: "Cuando el paso esté en <b>OK</b>, se desbloquea el Paso 6." }]
+                    : [])
             ];
 
             const safeSteps = steps.filter(s => !s.element || document.querySelector(s.element));

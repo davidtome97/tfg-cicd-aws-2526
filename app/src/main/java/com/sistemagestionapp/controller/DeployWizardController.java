@@ -86,15 +86,27 @@ public class DeployWizardController {
 
         model.addAttribute("pasoActualCompleto", pasoActualCompleto);
 
+        // Cargamos la aplicación solo cuando realmente hace falta
+        Aplicacion app = null;
+        boolean necesitaApp =
+                paso == PasoDespliegue.SONAR_ANALISIS ||
+                        paso == PasoDespliegue.REPOSITORIO_GIT ||
+                        paso == PasoDespliegue.IMAGEN_ECR ||
+                        paso == PasoDespliegue.BASE_DATOS ||
+                        paso == PasoDespliegue.DESPLIEGUE_EC2;
+
+        if (necesitaApp) {
+            app = deployWizardService.obtenerAplicacion(appId);
+        }
+
         // ✅ PRECARGA PASO 1 (SONAR)
         if (paso == PasoDespliegue.SONAR_ANALISIS) {
-            Aplicacion app = deployWizardService.obtenerAplicacion(appId);
-
-            model.addAttribute("sonarHostUrl",
+            String sonarHost =
                     (app.getSonarHostUrl() != null && !app.getSonarHostUrl().isBlank())
-                            ? app.getSonarHostUrl()
-                            : "https://sonarcloud.io");
+                            ? app.getSonarHostUrl().trim()
+                            : "https://sonarcloud.io";
 
+            model.addAttribute("sonarHostUrl", sonarHost);
             model.addAttribute("sonarOrganization", app.getSonarOrganization());
             model.addAttribute("projectKey", app.getSonarProjectKey());
             model.addAttribute("sonarToken", app.getSonarToken());
@@ -106,34 +118,42 @@ public class DeployWizardController {
             model.addAttribute("projectKey", projectKey);
         }
 
-        // ✅ PRECARGA PASO 3 (repo) para que no se pierda al navegar
+        // ✅ PRECARGA PASO 3 (repo)
         if (paso == PasoDespliegue.REPOSITORIO_GIT) {
-            Aplicacion app = deployWizardService.obtenerAplicacion(appId);
-
             model.addAttribute("repositorioGit", app.getRepositorioGit());
 
             String prov = (app.getProveedorCiCd() != null)
                     ? app.getProveedorCiCd().name().toLowerCase()
                     : "github";
-
             model.addAttribute("proveedor", prov);
         }
 
-        // ✅ PRECARGA PASO 4 (AWS/ECR) para que no se pierdan al navegar
+        // ✅ PRECARGA PASO 4 (AWS/ECR) + TAG default latest
         if (paso == PasoDespliegue.IMAGEN_ECR) {
-            Aplicacion app = deployWizardService.obtenerAplicacion(appId);
 
-            // Estos nombres deben coincidir con th:value del HTML
-            model.addAttribute("ecrRepository", app.getEcrRepository()); // 👈 usa el campo real
+            // ✅ ECR repo: intenta primero ecrRepository; si está vacío, usa nombreImagenEcr (fallback)
+            String repo = (app.getEcrRepository() != null) ? app.getEcrRepository().trim() : "";
+            if (repo.isBlank()) {
+                // si tu entidad tiene este getter, lo usamos como plan B
+                // (según tu DB/logs existe nombre_imagen_ecr)
+                repo = (app.getNombreImagenEcr() != null) ? app.getNombreImagenEcr().trim() : "";
+            }
+            model.addAttribute("ecrRepository", repo);
+
             model.addAttribute("awsRegion", app.getAwsRegion());
             model.addAttribute("awsAccessKeyId", app.getAwsAccessKeyId());
             model.addAttribute("awsSecretAccessKey", app.getAwsSecretAccessKey());
             model.addAttribute("awsAccountId", app.getAwsAccountId());
+
+            // IMAGE_TAG: si está vacío -> latest
+            String tag = (app.getImageTag() != null && !app.getImageTag().isBlank())
+                    ? app.getImageTag().trim()
+                    : "latest";
+            model.addAttribute("imageTag", tag);
         }
 
-        // ✅ PRECARGA PASO 5 (BBDD) para que no se pierda al navegar
+        // ✅ PRECARGA PASO 5 (BBDD)
         if (paso == PasoDespliegue.BASE_DATOS) {
-            Aplicacion app = deployWizardService.obtenerAplicacion(appId);
 
             // mode: local / remote
             String mode = (app.getDbModo() != null)
@@ -141,7 +161,7 @@ public class DeployWizardController {
                     : "local";
             model.addAttribute("dbMode", mode);
 
-            // engine: postgres / mysql / mongo (ojo con POSTGRESQL)
+            // engine: postgres / mysql / mongo
             String engine = "postgres";
             if (app.getTipoBaseDatos() != null) {
                 engine = switch (app.getTipoBaseDatos()) {
@@ -158,9 +178,19 @@ public class DeployWizardController {
             // contraseña: por seguridad NO precargar
             model.addAttribute("dbPassword", null);
 
-            // endpoint y puerto: como NO los guardas en entidad, null
-            model.addAttribute("dbEndpoint", null);
-            model.addAttribute("dbPort", null);
+            // endpoint / puerto: precargar desde entidad (si existen)
+            model.addAttribute("dbEndpoint", app.getDbEndpoint());
+            model.addAttribute("dbPort", app.getDbPort());
+        }
+
+        // ✅ PRECARGA PASO 6 (EC2)
+        if (paso == PasoDespliegue.DESPLIEGUE_EC2) {
+
+            // Para que funcionen: app.ec2Host, app.ec2User, app.ec2KnownHosts, etc.
+            model.addAttribute("app", app);
+
+            // Puerto que tú quieres (puerto_aplicacion)
+            model.addAttribute("appPort", app.getPuertoAplicacion());
         }
     }
 
@@ -527,6 +557,7 @@ public class DeployWizardController {
 
         Aplicacion app = deployWizardService.getAppOrThrow(appId);
         model.addAttribute("app", app);
+        model.addAttribute("appPort", app.getPuertoAplicacion());
 
         boolean hayLlaveGuardada = app.getEc2LlaveSsh() != null && !app.getEc2LlaveSsh().isBlank();
         model.addAttribute("hayLlaveGuardada", hayLlaveGuardada);

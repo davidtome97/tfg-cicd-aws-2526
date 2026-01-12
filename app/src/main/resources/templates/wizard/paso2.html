@@ -40,9 +40,11 @@
         <h2 class="mb-0">Paso 2 – Comprobar integración Sonar–Git</h2>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_2.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_2.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <!-- ✅ botón tutorial -->
@@ -265,19 +267,45 @@
         let steps = [
             {
                 title: "SONAR ↔ GIT",
-                intro: "Bienvenido al tutorial del Paso 2. Aquí verificas que SonarCloud está vinculado a tu repositorio y hay análisis recientes."
+                intro: `
+            Bienvenido al <b>Paso 2</b> del asistente.<br><br>
+            En este paso comprobarás que <b>SonarCloud</b> está correctamente
+            vinculado a tu repositorio Git y que existen análisis recientes.
+        `
             },
             {
-                element: '#projectkey_container',
-                intro: "SONAR_PROJECT_KEY: se precarga desde el Paso 1. Puedes corregirlo aquí si hiciera falta."
+                element: "#btnGuiaPaso",
+                title: "📘 Guía del paso (OBLIGATORIA)",
+                intro: `
+            <b>Empieza siempre por aquí.</b><br><br>
+            Descarga y lee la guía del Paso 2 antes de continuar.
+            Explica cómo verificar correctamente la integración entre
+            <b>SonarCloud</b> y tu repositorio Git.
+        `,
+                position: "bottom"
             },
             {
-                element: '#btn_comprobar',
-                intro: "Pulsa aquí para comprobar la integración Sonar ↔ Git. Si sale OK, se guarda el paso y podrás continuar al Paso 3."
+                element: "#projectkey_container",
+                intro: `
+            <b>SONAR_PROJECT_KEY</b><br>
+            Este valor se precarga desde el Paso 1.<br>
+            Puedes corregirlo aquí si fuera necesario.
+        `
             },
             {
-                element: '#btnPaso3',
-                intro: "Cuando esté en OK, ya podrás continuar al siguiente paso del asistente."
+                element: "#btn_comprobar",
+                intro: `
+            Pulsa aquí para comprobar la integración
+            <b>Sonar ↔ Git</b>.<br>
+            Si todo es correcto, el paso se marcará como <b>OK</b>.
+        `
+            },
+            {
+                element: "#btnPaso3",
+                intro: `
+            Cuando el estado esté en <b>OK</b>,
+            podrás continuar al <b>Paso 3</b> del asistente.
+        `
             }
         ];
 

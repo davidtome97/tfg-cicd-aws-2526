@@ -40,9 +40,11 @@
         <h2 class="mb-0">Paso 3 – Comprobar repositorio Git</h2>
 
         <div class="d-flex gap-2">
-            <a href="/manuales/paso_3.pdf" target="_blank"
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_3.pdf"
+               target="_blank"
                class="btn btn-outline-secondary btn-sm">
-                Ver guía de este paso
+                📘 Ver guía de este paso
             </a>
 
             <!-- ✅ botón tutorial -->
@@ -301,23 +303,52 @@
         let steps = [
             {
                 title: "REPOSITORIO GIT",
-                intro: "Bienvenido al tutorial del Paso 3. Aquí compruebas que el repositorio existe (GitHub/GitLab) y que tiene al menos un commit."
+                intro: `
+            Bienvenido al <b>Paso 3</b> del asistente.<br><br>
+            En este paso comprobarás que tu repositorio existe
+            (<b>GitHub</b> o <b>GitLab</b>) y que contiene al menos
+            <b>un commit</b> válido.
+        `
             },
             {
-                element: '#proveedor_container',
-                intro: "Selecciona el proveedor donde está tu repo: GitHub o GitLab."
+                element: "#btnGuiaPaso",
+                title: "📘 Guía del paso (MUY IMPORTANTE)",
+                intro: `
+            Antes de continuar, descarga y lee la guía de este paso.<br><br>
+            Explica el formato correcto del repositorio y
+            cómo evitar los errores más comunes.
+        `,
+                position: "bottom"
             },
             {
-                element: '#repo_container',
-                intro: "Escribe el repositorio con el formato correcto: owner/repo (GitHub) o grupo/proyecto (GitLab)."
+                element: "#proveedor_container",
+                intro: `
+            Selecciona el <b>proveedor</b> donde está tu repositorio:
+            GitHub o GitLab.
+        `
             },
             {
-                element: '#btn_comprobar',
-                intro: "Pulsa aquí para comprobar el repositorio. Si sale OK, se desbloqueará el Paso 4."
+                element: "#repo_container",
+                intro: `
+            Escribe el repositorio con el formato correcto:<br>
+            <code>owner/repo</code> (GitHub) o
+            <code>grupo/proyecto</code> (GitLab).
+        `
             },
             {
-                element: '#btnPaso4',
-                intro: "Cuando el paso esté en OK, podrás continuar al Paso 4."
+                element: "#btn_comprobar",
+                intro: `
+            Pulsa aquí para comprobar el repositorio.<br>
+            Si todo es correcto, el paso se marcará como <b>OK</b>
+            y se desbloqueará el siguiente paso.
+        `
+            },
+            {
+                element: "#btnPaso4",
+                intro: `
+            Cuando el estado esté en <b>OK</b>,
+            podrás continuar al <b>Paso 4</b> del asistente.
+        `
             }
         ];
 
