@@ -1,0 +1,2 @@
+ALTER TABLE aplicacion
+    ADD COLUMN IF NOT EXISTS lenguaje VARCHAR(30);
