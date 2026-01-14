@@ -218,11 +218,13 @@ jobs:
             # login ECR
             aws ecr get-login-password --region "$AWS_REGION_IN" \
               | sudo -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          
+            # Levanto postgres si no existe / por si está parado (NO lo baja nunca)
+            sudo -E docker compose -f docker-compose.yml up -d postgres
 
-            # down / pull / up
-            sudo -E docker compose -f docker-compose.yml down --remove-orphans || true
-            sudo -E docker compose -f docker-compose.yml pull
-            sudo -E docker compose -f docker-compose.yml up -d --remove-orphans
+            # Actualizo SOLO la app (NO toca postgres)
+            sudo -E docker compose -f docker-compose.yml pull app
+            sudo -E docker compose -f docker-compose.yml up -d --no-deps --force-recreate app
 
             echo "Estado:"
             sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
