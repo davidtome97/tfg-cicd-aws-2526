@@ -1,0 +1,12 @@
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS lenguaje VARCHAR(30);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS proveedor_ci_cd VARCHAR(30);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS repositorio_git VARCHAR(255);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS puerto_aplicacion INTEGER;
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS tipo_base_datos VARCHAR(30);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS nombre_base_datos VARCHAR(120);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS usuario_base_datos VARCHAR(120);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS password_base_datos TEXT;
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS sonar_project_key VARCHAR(255);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS sonar_host_url VARCHAR(255);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS sonar_organization VARCHAR(255);
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS nombre_imagen_ecr VARCHAR(255);

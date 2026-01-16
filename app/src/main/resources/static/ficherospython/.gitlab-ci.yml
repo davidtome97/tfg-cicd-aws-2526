@@ -1,0 +1,182 @@
+stages:
+  - test
+  - sonar
+  - build
+  - deploy
+
+variables:
+  DOCKER_TLS_CERTDIR: ""
+  IMAGE_TAG: "$CI_COMMIT_SHA"
+
+test:
+  stage: test
+  image: python:3.11
+  script:
+    - python -m pip install --upgrade pip
+    - |
+      if [ -f "requirements.txt" ]; then
+        pip install -r requirements.txt
+      elif [ -f "pyproject.toml" ]; then
+        pip install .
+      else
+        echo "No requirements.txt ni pyproject.toml. Saltando instalación."
+      fi
+    - pip install pytest || true
+    - |
+      if python -c "import pytest" >/dev/null 2>&1; then
+        pytest -q || pytest
+      else
+        echo "pytest no disponible. Haciendo check básico."
+        python -m compileall -q .
+      fi
+
+sonar:
+  stage: sonar
+  image: python:3.11
+  script:
+    - |
+      if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_PROJECT_KEY" ] || [ -z "$SONAR_ORGANIZATION" ]; then
+        echo "Sonar vars not configured. Skipping."
+        exit 0
+      fi
+    - |
+      if [ -z "$SONAR_HOST_URL" ]; then
+        export SONAR_HOST_URL="https://sonarcloud.io"
+      fi
+    - apt-get update -y && apt-get install -y unzip curl
+    - curl -sSLo /tmp/sonar.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-6.2.1.4610-linux-x64.zip
+    - unzip -q /tmp/sonar.zip -d /tmp
+    - export PATH="/tmp/sonar-scanner-6.2.1.4610-linux-x64/bin:$PATH"
+    - |
+      sonar-scanner \
+        -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+        -Dsonar.organization="${SONAR_ORGANIZATION}" \
+        -Dsonar.host.url="${SONAR_HOST_URL}" \
+        -Dsonar.login="${SONAR_TOKEN}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+build_and_push_ecr:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - set -e
+    - apk add --no-cache python3 py3-pip
+    - pip install awscli
+    - export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+    - export IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+    - docker build -t "${IMAGE_URI}" .
+    - docker tag "${IMAGE_URI}" "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+    - docker push "${IMAGE_URI}"
+    - docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+
+deploy_ec2:
+  stage: deploy
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache openssh-client bash curl python3 py3-pip
+    - pip install --no-cache-dir awscli
+  script:
+    - set -euo pipefail
+
+    - mkdir -p ~/.ssh
+    - printf "%s" "$EC2_LLAVE_SSH" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+
+    - |
+      if [ -n "${EC2_KNOWN_HOSTS:-}" ]; then
+        printf "%s\n" "${EC2_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+      else
+        ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+      fi
+
+    - ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" "mkdir -p ~/app"
+    - scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes docker-compose.yml "${EC2_USER}@${EC2_HOST}:~/app/docker-compose.yml"
+
+    - |
+      ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes "${EC2_USER}@${EC2_HOST}" \
+        DB_MODE="${DB_MODE:-}" \
+        DB_ENGINE="${DB_ENGINE:-}" \
+        DB_PORT="${DB_PORT:-}" \
+        DB_NAME="${DB_NAME:-}" \
+        APP_PORT="${APP_PORT:-}" \
+        DB_HOST="${DB_HOST:-}" \
+        DB_USER="${DB_USER:-}" \
+        DB_PASSWORD="${DB_PASSWORD:-}" \
+        DB_URI="${DB_URI:-}" \
+        AWS_REGION="${AWS_REGION:?Falta AWS_REGION}" \
+        AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:?Falta AWS_ACCOUNT_ID}" \
+        ECR_REPOSITORY="${ECR_REPOSITORY:?Falta ECR_REPOSITORY}" \
+        IMAGE_TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHA}" \
+        bash -se <<'EOF'
+      set -euo pipefail
+
+      clean() { printf '%s' "${1:-}" | tr -d '\r' | tr -d '\n'; }
+
+      cd ~/app
+      rm -f .env .env.local .env.remote || true
+
+      export COMPOSE_PROJECT_NAME="__APP_NAME__"
+
+      DB_MODE_IN="$(clean "${DB_MODE:-local}")"
+      [ -z "$DB_MODE_IN" ] && DB_MODE_IN="local"
+      case "$DB_MODE_IN" in local|remote) ;; *) echo "DB_MODE inválido: $DB_MODE_IN"; exit 1;; esac
+      export COMPOSE_PROFILES="$DB_MODE_IN"
+
+      export DB_ENGINE="$(clean "${DB_ENGINE:-postgres}")"
+      export DB_PORT="$(clean "${DB_PORT:-5432}")"
+      export DB_NAME="$(clean "${DB_NAME:-demo}")"
+      export APP_PORT="$(clean "${APP_PORT:-8082}")"
+
+      AWS_REGION_IN="$(clean "${AWS_REGION}")"
+      AWS_ACCOUNT_ID_IN="$(clean "${AWS_ACCOUNT_ID}")"
+      ECR_REPO_IN="$(clean "${ECR_REPOSITORY}")"
+      IMAGE_TAG_IN="$(clean "${IMAGE_TAG}")"
+
+      ECR_REGISTRY="${AWS_ACCOUNT_ID_IN}.dkr.ecr.${AWS_REGION_IN}.amazonaws.com"
+      export IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO_IN}:${IMAGE_TAG_IN}"
+
+      if [ "$COMPOSE_PROFILES" = "remote" ]; then
+        if [ "$DB_ENGINE" = "mongo" ]; then
+          export DB_URI="$(clean "${DB_URI:-}")"
+          [ -n "$DB_URI" ] || (echo "❌ Falta DB_URI para mongo remoto" && exit 1)
+          unset DB_HOST DB_PORT DB_USER DB_PASSWORD || true
+        else
+          export DB_HOST="$(clean "${DB_HOST:-}")"
+          export DB_USER="$(clean "${DB_USER:-}")"
+          export DB_PASSWORD="$(clean "${DB_PASSWORD:-}")"
+          [ -n "$DB_HOST" ] && [ -n "$DB_USER" ] && [ -n "$DB_PASSWORD" ] || (echo "❌ Faltan DB_HOST/DB_USER/DB_PASSWORD" && exit 1)
+        fi
+      else
+        export DB_USER="$(clean "${DB_USER:-demo}")"
+        export DB_PASSWORD="$(clean "${DB_PASSWORD:-demo}")"
+      fi
+
+      aws ecr get-login-password --region "$AWS_REGION_IN" \
+        | sudo -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" down --remove-orphans || true
+
+      PORT_IN_USE="$(sudo ss -ltnp | awk -v p=":${APP_PORT}" '$4 ~ p {print $0}' || true)"
+      if [ -n "$PORT_IN_USE" ]; then
+        CID="$(sudo docker ps --format '{{.ID}} {{.Ports}}' | awk -v p=":${APP_PORT}->" '$0 ~ p {print $1; exit}' || true)"
+        if [ -n "$CID" ]; then
+          sudo docker stop "$CID" || true
+          sudo docker rm -f "$CID" || true
+        fi
+      fi
+
+      sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" pull
+      sudo -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" up -d --remove-orphans
+
+      sudo docker ps
+      EOF
+rules:
+  - if: '$CI_COMMIT_TAG'
