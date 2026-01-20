@@ -219,3 +219,8 @@ Este proyecto se desarrolla como **Trabajo Fin de Grado**, con un enfoque práct
 David Tomé Arnaiz 
 Proyecto desarrollado como **Trabajo Fin de Grado** en la Universidad de Burgos
 Grado en Ingeniería Informática 
+
+## License
+
+This project is licensed under the MIT License.
+See the LICENSE file for details.
