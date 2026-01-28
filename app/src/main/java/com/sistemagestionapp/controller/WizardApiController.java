@@ -17,19 +17,40 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * En este controlador REST expongo endpoints de validación y confirmación para distintos pasos del asistente.
+ *
+ * Devuelvo respuestas JSON con estado y mensaje para su consumo desde la interfaz. En el paso de base de datos,
+ * además persisto la configuración y registro el estado del paso mediante {@link DeployWizardService}.
+ *
+ * @author David Tomé Arnaiz
+ */
 @RestController
 @RequestMapping("/api/wizard")
 public class WizardApiController {
 
     private final DeployWizardService deployWizardService;
 
+    /**
+     * En este constructor inyecto el servicio principal del asistente.
+     *
+     * @param deployWizardService servicio con la lógica de persistencia y control de pasos
+     * @author David Tomé Arnaiz
+     */
     public WizardApiController(DeployWizardService deployWizardService) {
         this.deployWizardService = deployWizardService;
     }
 
-    /* =========================================================
-       ✅ PASO 1 - VALIDACIÓN SONAR (solo token + projectKey)
-       ========================================================= */
+    /**
+     * En este endpoint realizo una validación mínima del paso 1 (Sonar).
+     *
+     * Verifico la presencia de token y projectKey, devolviendo un estado y un mensaje informativo.
+     *
+     * @param appId identificador de la aplicación
+     * @param token token de Sonar
+     * @param projectKey clave del proyecto en Sonar
+     * @return mapa con el estado y el mensaje en formato JSON
+     */
     @GetMapping(value = "/paso1", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> validarPaso1(@RequestParam Long appId,
                                             @RequestParam String token,
@@ -51,9 +72,15 @@ public class WizardApiController {
         return out;
     }
 
-    /* =========================================================
-       ✅ PASO 2 - VALIDACIÓN INTEGRACIÓN SONAR ↔ GIT (mínima)
-       ========================================================= */
+    /**
+     * En este endpoint realizo una validación mínima del paso 2 (integración Sonar ↔ Git).
+     *
+     * Verifico la presencia del projectKey, devolviendo un estado y un mensaje informativo.
+     *
+     * @param appId identificador de la aplicación
+     * @param projectKey clave del proyecto en Sonar
+     * @return mapa con el estado y el mensaje en formato JSON
+     */
     @GetMapping(value = "/paso2", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> validarPaso2(@RequestParam Long appId,
                                             @RequestParam String projectKey) {
@@ -72,9 +99,16 @@ public class WizardApiController {
         return out;
     }
 
-    /* =========================================================
-       ✅ PASO 3 - VALIDACIÓN REPO (mínima)
-       ========================================================= */
+    /**
+     * En este endpoint realizo una validación mínima del paso 3 (repositorio Git).
+     *
+     * Verifico proveedor, formato de repositorio y valores admitidos para el proveedor.
+     *
+     * @param appId identificador de la aplicación
+     * @param proveedor proveedor Git (github o gitlab)
+     * @param repo repositorio en formato slug (owner/repo o grupo/proyecto)
+     * @return mapa con el estado y el mensaje en formato JSON
+     */
     @GetMapping(value = "/paso3", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> validarPaso3(@RequestParam Long appId,
                                             @RequestParam String proveedor,
@@ -108,9 +142,19 @@ public class WizardApiController {
         return out;
     }
 
-    /* =========================================================
-       ✅ PASO 4 - VALIDACIÓN AWS/ECR (mínima)
-       ========================================================= */
+    /**
+     * En este endpoint realizo una validación mínima del paso 4 (AWS/ECR).
+     *
+     * Verifico la presencia de variables requeridas y valido formato de accountId (12 dígitos) y región AWS.
+     *
+     * @param appId identificador de la aplicación
+     * @param ecrRepository repositorio de ECR
+     * @param awsRegion región de AWS
+     * @param awsAccessKeyId access key de AWS
+     * @param awsSecretAccessKey secret access key de AWS
+     * @param awsAccountId account id de AWS (12 dígitos)
+     * @return mapa con el estado y el mensaje en formato JSON
+     */
     @GetMapping(value = "/paso4", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> validarPaso4(@RequestParam Long appId,
                                             @RequestParam String ecrRepository,
@@ -150,31 +194,41 @@ public class WizardApiController {
         return out;
     }
 
-    /* =========================================================
-       ✅ PASO 5 - GUARDAR CONFIG BD + MARCAR OK
-       ========================================================= */
+    /**
+     * En este endpoint guardo la configuración de base de datos y marco el paso 5 como completado.
+     *
+     * Normalizo el modo (local/remote) y el motor (postgres/mysql/mongo) para mapearlos a {@link DbModo} y
+     * {@link TipoBaseDatos}, y delego el guardado en {@link DeployWizardService}.
+     *
+     * @param appId identificador de la aplicación
+     * @param mode modo de base de datos (local|remote)
+     * @param engine motor de base de datos (postgres|mysql|mongo)
+     * @param port puerto (opcional)
+     * @param dbName nombre de la base de datos (opcional según modo/motor)
+     * @param dbUser usuario (opcional)
+     * @param dbPassword contraseña (opcional)
+     * @param endpoint endpoint o URI (opcional según modo/motor)
+     * @return respuesta vacía en caso de éxito
+     */
     @PostMapping(value = "/paso5/confirmar")
     public ResponseEntity<Void> confirmarPaso5(@RequestParam Long appId,
-                                               @RequestParam String mode,     // local | remote
-                                               @RequestParam String engine,   // postgres | mysql | mongo
+                                               @RequestParam String mode,
+                                               @RequestParam String engine,
                                                @RequestParam(required = false) Integer port,
                                                @RequestParam(required = false) String dbName,
                                                @RequestParam(required = false) String dbUser,
                                                @RequestParam(required = false) String dbPassword,
-                                               @RequestParam(required = false) String endpoint // opcional
-    ) {
-        // Normaliza modo
+                                               @RequestParam(required = false) String endpoint) {
+
         DbModo dbModo = "remote".equalsIgnoreCase(mode) ? DbModo.REMOTE : DbModo.LOCAL;
 
-        // Normaliza motor (AJUSTA nombres si tu enum no coincide)
         TipoBaseDatos tipo = switch (engine.toLowerCase()) {
-            case "postgres" -> TipoBaseDatos.POSTGRESQL; // <- si tu enum es POSTGRES, cambia aquí
+            case "postgres" -> TipoBaseDatos.POSTGRESQL;
             case "mysql" -> TipoBaseDatos.MYSQL;
-            case "mongo" -> TipoBaseDatos.MONGODB;       // <- si tu enum es MONGO, cambia aquí
+            case "mongo" -> TipoBaseDatos.MONGODB;
             default -> throw new IllegalArgumentException("Motor no soportado: " + engine);
         };
 
-        // ✅ Guarda todo usando el service (el controller NO toca repositorios)
         deployWizardService.guardarPaso5Bd(
                 appId,
                 dbModo,
@@ -186,7 +240,6 @@ public class WizardApiController {
                 endpoint
         );
 
-        // ✅ Marca el paso
         deployWizardService.marcarPaso(
                 appId,
                 PasoDespliegue.BASE_DATOS,
@@ -197,9 +250,17 @@ public class WizardApiController {
         return ResponseEntity.noContent().build();
     }
 
-
-
-
+    /**
+     * En este endpoint valido el paso 6 comprobando la accesibilidad HTTP de la aplicación desplegada en EC2.
+     *
+     * Realizo una petición HTTP simple a la ruta raíz utilizando un timeout corto. Si recibo una respuesta con código
+     * entre 200 y 499 considero que existe conectividad y devuelvo OK. En caso contrario, devuelvo KO.
+     *
+     * @param appId identificador de la aplicación
+     * @param host dirección IP o DNS público
+     * @param port puerto público de la aplicación
+     * @return mapa con el estado y el mensaje en formato JSON
+     */
     @GetMapping(value = "/paso6", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> validarPaso6(@RequestParam Long appId,
                                             @RequestParam String host,
@@ -214,7 +275,6 @@ public class WizardApiController {
             return out;
         }
 
-        // Comprobación HTTP simple (timeout corto)
         try {
             HttpClient client = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(4))

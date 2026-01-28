@@ -11,19 +11,30 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 /**
- * En este servicio gestiono el estado de cada paso del asistente de despliegue.
- * Me encargo de comprobar si un paso está completado, si se puede acceder a un paso
- * concreto y de registrar los resultados (OK, KO o PENDIENTE) de cada fase.
+ * En este servicio gestiono el estado y el flujo de los pasos del asistente de despliegue.
+ *
+ * Me encargo de comprobar si un paso está completado correctamente, decidir si se puede
+ * acceder a un paso concreto y registrar el resultado de cada fase del asistente
+ * (OK, KO o PENDIENTE).
+ *
+ * Centralizar esta lógica me permite mantener un flujo secuencial coherente
+ * y evitar inconsistencias entre pasos.
+ *
+ * @author David Tomé Arnaiz
  */
 @Service
 public class ControlDespliegueService {
 
-    // Repositorio que utilizo para leer y guardar los estados de cada paso
     private final ControlDespliegueRepository controlRepo;
-
-    // Repositorio que utilizo para asociar los pasos a una aplicación concreta
     private final AplicacionRepository aplicacionRepo;
 
+    /**
+     * En este constructor inyecto los repositorios necesarios para gestionar
+     * los controles de despliegue y su relación con las aplicaciones.
+     *
+     * @param controlRepo repositorio de controles de despliegue
+     * @param aplicacionRepo repositorio de aplicaciones
+     */
     public ControlDespliegueService(ControlDespliegueRepository controlRepo,
                                     AplicacionRepository aplicacionRepo) {
         this.controlRepo = controlRepo;
@@ -31,8 +42,11 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Compruebo si un paso concreto está en estado OK para una aplicación.
-     * Este método lo utilizo para validar si un paso ya se ha completado correctamente.
+     * Compruebo si un paso concreto se encuentra en estado OK para una aplicación.
+     *
+     * @param appId identificador de la aplicación
+     * @param paso paso del asistente
+     * @return {@code true} si el paso está en estado OK, {@code false} en caso contrario
      */
     @Transactional(readOnly = true)
     public boolean estaPasoOk(Long appId, PasoDespliegue paso) {
@@ -42,24 +56,30 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Decido si se puede acceder a un paso del asistente.
-     * La regla es simple: el paso anterior debe estar en estado OK.
-     * Si el paso no tiene previo (primer paso), permito el acceso directamente.
+     * Decido si se puede acceder a un paso concreto del asistente.
+     *
+     * Permito el acceso únicamente si el paso previo está en estado OK.
+     * Si el paso no tiene un paso previo, permito el acceso directamente.
+     *
+     * @param appId identificador de la aplicación
+     * @param pasoActual paso al que se quiere acceder
+     * @return {@code true} si se permite el acceso, {@code false} en caso contrario
      */
     @Transactional(readOnly = true)
     public boolean puedoAcceder(Long appId, PasoDespliegue pasoActual) {
         PasoDespliegue previo = pasoActual.getPasoPrevio();
         if (previo == null) {
-            // Es el primer paso del asistente
             return true;
         }
         return estaPasoOk(appId, previo);
     }
 
     /**
-     * Devuelvo el paso al que se debe redirigir al usuario si intenta acceder
-     * a un paso que todavía no está permitido.
-     * Normalmente será el paso previo.
+     * Devuelvo el paso al que se debe redirigir al usuario cuando intenta
+     * acceder a un paso no permitido.
+     *
+     * @param pasoActual paso solicitado
+     * @return paso al que se debe redirigir
      */
     public PasoDespliegue getPasoRedireccion(PasoDespliegue pasoActual) {
         PasoDespliegue previo = pasoActual.getPasoPrevio();
@@ -67,9 +87,14 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Marco un paso como OK.
-     * Si no existe aún un registro para ese paso y aplicación, lo creo.
-     * También guardo un mensaje descriptivo y la fecha de ejecución.
+     * Marco un paso como completado correctamente (OK).
+     *
+     * Si el control no existe, lo creo y lo asocio a la aplicación indicada.
+     * También registro un mensaje descriptivo y la fecha de ejecución.
+     *
+     * @param appId identificador de la aplicación
+     * @param paso paso a marcar
+     * @param mensaje mensaje informativo asociado al paso
      */
     @Transactional
     public void marcarPasoOk(Long appId, PasoDespliegue paso, String mensaje) {
@@ -88,9 +113,11 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Marco un paso como PENDIENTE.
-     * Utilizo este estado cuando el paso todavía no se ha completado
-     * o queda a la espera de una acción del usuario.
+     * Marco un paso como pendiente de completar.
+     *
+     * @param appId identificador de la aplicación
+     * @param paso paso a marcar
+     * @param mensaje mensaje informativo asociado al estado pendiente
      */
     @Transactional
     public void marcarPasoPendiente(Long appId, PasoDespliegue paso, String mensaje) {
@@ -109,9 +136,14 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Marco un paso como KO.
-     * Este estado indica que el paso ha fallado y no se puede continuar
-     * hasta que el problema se solucione.
+     * Marco un paso como fallido (KO).
+     *
+     * Este estado indica que el asistente no puede continuar hasta que
+     * el error sea corregido.
+     *
+     * @param appId identificador de la aplicación
+     * @param paso paso a marcar
+     * @param mensaje mensaje descriptivo del error
      */
     @Transactional
     public void marcarPasoKo(Long appId, PasoDespliegue paso, String mensaje) {
@@ -130,9 +162,14 @@ public class ControlDespliegueService {
     }
 
     /**
-     * Obtengo el estado de un paso concreto para una aplicación.
-     * Este método lo utilizo principalmente para mostrar información
+     * Obtengo el control de un paso concreto para una aplicación.
+     *
+     * Este método se utiliza principalmente para mostrar información
      * en las vistas del asistente.
+     *
+     * @param appId identificador de la aplicación
+     * @param paso paso del asistente
+     * @return control del paso o {@code null} si no existe
      */
     @Transactional(readOnly = true)
     public ControlDespliegue getControl(Long appId, PasoDespliegue paso) {

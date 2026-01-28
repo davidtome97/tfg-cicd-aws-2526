@@ -23,10 +23,25 @@ import java.util.Comparator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+/**
+ * En este servicio genero el ZIP descargable asociado a una aplicación.
+ *
+ * Construyo un paquete con una estructura lista para usar en un repositorio, que puede contener:
+ * - una demo completa (Java o Python) si el tipo de proyecto es {@link TipoProyecto#DEMO}
+ * - una estructura mínima de configuración si el tipo de proyecto es {@link TipoProyecto#CONFIG}
+ *
+ * Además, incluyo los ficheros de automatización necesarios para CI/CD y despliegue:
+ * - pipeline de CI/CD según {@link ProveedorCiCd}
+ * - {@code docker-compose.yml} según {@link TipoBaseDatos}
+ * - {@code app-config.properties} con los parámetros seleccionados
+ *
+ * Finalmente escribo el ZIP en la respuesta HTTP para que el navegador lo descargue.
+ *
+ * @author David Tomé Arnaiz
+ */
 @Service
 public class ZipGeneratorService {
 
-    // Aquí inyecto el servicio que uso para cargar la aplicación desde base de datos (por id).
     private final AplicacionService aplicacionService;
 
     public ZipGeneratorService(AplicacionService aplicacionService) {
@@ -34,64 +49,44 @@ public class ZipGeneratorService {
     }
 
     /**
-     * En este método genero un ZIP único con el contenido que el usuario se descarga.
-     * Yo decido si el ZIP contiene una demo completa o solo ficheros de configuración, según app.getTipoProyecto().
+     * Genero un ZIP con el contenido asociado a una aplicación y lo devuelvo como descarga HTTP.
      *
-     * Qué meto dentro del ZIP:
-     * - Si es DEMO: copio la carpeta demo-java o demo-python al ZIP.
-     * - Si es CONFIG: creo una estructura mínima con README y .gitignore.
+     * Creo un directorio temporal, monto dentro la estructura final y la comprimo.
+     * Al finalizar, elimino el directorio temporal para no dejar residuos en el servidor.
      *
-     * En ambos casos, además:
-     * - Genero el pipeline CI/CD según proveedor (GitHub/GitLab/Jenkins) y lenguaje.
-     * - Genero el docker-compose.yml según el motor de base de datos elegido.
-     * - Genero un app-config.properties para dejar documentada la configuración seleccionada.
-     *
-     * Finalmente escribo el ZIP en la respuesta HTTP como fichero descargable.
+     * @param aplicacionId identificador de la aplicación
+     * @param response respuesta HTTP sobre la que escribo el ZIP
+     * @throws IOException si ocurre un error de E/S al crear o enviar el ZIP
      */
     public void generarZipAplicacion(Long aplicacionId, HttpServletResponse response) throws IOException {
-        // Aquí recupero la aplicación a partir del id. Si no existe, corto el proceso.
         Aplicacion app = aplicacionService.obtenerPorId(aplicacionId);
         if (app == null) {
             throw new IllegalArgumentException("No existe la aplicación con id=" + aplicacionId);
         }
 
-        // Aquí aplico defaults por si algún campo de la aplicación viene vacío.
         Lenguaje lenguaje = (app.getLenguaje() != null) ? app.getLenguaje() : Lenguaje.JAVA;
         TipoProyecto tipoProyecto = (app.getTipoProyecto() != null) ? app.getTipoProyecto() : TipoProyecto.CONFIG;
 
-        // Aquí calculo el directorio base desde el que se está ejecutando el proyecto.
-        // Lo uso para localizar la carpeta demo-java o demo-python.
         Path baseDir = Paths.get("").toAbsolutePath();
-
-        // Aquí decido qué carpeta demo voy a buscar, según el lenguaje.
         String demoFolderName = (lenguaje == Lenguaje.PYTHON) ? "demo-python" : "demo-java";
 
-        // Aquí intento localizar la carpeta demo de forma robusta:
-        // 1) ../demo-xxx (si ejecuto desde el módulo /app, que es lo normal)
-        // 2) ./demo-xxx (fallback si la estructura del repo cambia)
         Path origenDemo = (baseDir.getParent() != null) ? baseDir.getParent().resolve(demoFolderName) : null;
         if (origenDemo == null || !Files.isDirectory(origenDemo)) {
             origenDemo = baseDir.resolve(demoFolderName);
         }
 
-        // Aquí creo un directorio temporal donde monto el proyecto antes de comprimirlo.
         Path tempDir = Files.createTempDirectory("tfg-zip-");
 
-        // Aquí calculo el nombre del proyecto que verá el usuario dentro del ZIP.
-        // Si no hay nombre de app, uso un nombre por defecto basado en demoFolderName.
         String baseNombre = (app.getNombre() == null || app.getNombre().isBlank())
                 ? demoFolderName + "-proyecto"
                 : app.getNombre();
 
-        // Aquí genero un nombre seguro (sin tildes, sin espacios raros) para evitar problemas en rutas.
         String nombreProyecto = slug(baseNombre, demoFolderName + "-proyecto");
 
-        // Aquí creo la carpeta raíz del proyecto que irá dentro del ZIP.
         Path carpetaProyecto = tempDir.resolve(nombreProyecto);
         Files.createDirectories(carpetaProyecto);
 
         try {
-            // 1) Aquí decido si copio la DEMO o creo una estructura mínima de CONFIG.
             if (tipoProyecto == TipoProyecto.DEMO) {
                 if (!Files.isDirectory(origenDemo)) {
                     throw new IllegalStateException(
@@ -103,20 +98,13 @@ public class ZipGeneratorService {
                 crearEstructuraMinimaConfig(carpetaProyecto, lenguaje);
             }
 
-            // 2) Aquí genero el pipeline de CI/CD según el proveedor seleccionado por el usuario.
             generarPipelineCiCd(carpetaProyecto, app, lenguaje);
-
-            // 3) Aquí genero el docker-compose.yml según el motor de base de datos elegido.
             generarDockerCompose(carpetaProyecto, app, lenguaje);
-
-            // 4) Aquí genero un fichero app-config.properties para dejar la configuración documentada.
             generarAppConfigProperties(carpetaProyecto, app);
 
-            // 5) Aquí comprimo la carpeta del proyecto a un ZIP.
             Path zipPath = tempDir.resolve(nombreProyecto + ".zip");
             comprimirCarpetaEnZip(carpetaProyecto, zipPath);
 
-            // 6) Aquí devuelvo el ZIP al navegador como descarga.
             response.setContentType("application/zip");
             response.setHeader("Content-Disposition", "attachment; filename=\"" + zipPath.getFileName() + "\"");
             response.setContentLengthLong(Files.size(zipPath));
@@ -127,15 +115,20 @@ public class ZipGeneratorService {
                 os.flush();
             }
         } finally {
-            // Aquí limpio el directorio temporal para no dejar basura en el servidor.
             limpiarTemp(tempDir);
         }
     }
 
-    // En este método creo una estructura mínima cuando el usuario pide un ZIP de tipo CONFIG.
-    // Lo dejo preparado para que se pueda copiar dentro de un repo real.
+    /**
+     * Creo una estructura mínima cuando el usuario solicita un ZIP de tipo CONFIG.
+     *
+     * Incluyo un {@code README.md} y un {@code .gitignore} básico orientado al lenguaje seleccionado.
+     *
+     * @param carpetaProyecto carpeta raíz del proyecto que estoy generando
+     * @param lenguaje lenguaje seleccionado en la aplicación
+     * @throws IOException si ocurre un error al escribir ficheros
+     */
     private void crearEstructuraMinimaConfig(Path carpetaProyecto, Lenguaje lenguaje) throws IOException {
-        // Aquí creo un README básico explicando qué incluye el ZIP.
         Path readme = carpetaProyecto.resolve("README.md");
         if (!Files.exists(readme)) {
             String contenido = """
@@ -153,7 +146,6 @@ public class ZipGeneratorService {
             Files.writeString(readme, contenido, StandardCharsets.UTF_8, StandardOpenOption.CREATE);
         }
 
-        // Aquí creo un .gitignore distinto según sea Python o Java.
         Path gitignore = carpetaProyecto.resolve(".gitignore");
         if (!Files.exists(gitignore)) {
             String gi = (lenguaje == Lenguaje.PYTHON)
@@ -175,26 +167,30 @@ public class ZipGeneratorService {
         }
     }
 
-    // En este método copio una carpeta completa (la demo) a otra ruta.
-    // Además ignoro carpetas que no quiero meter en el ZIP, como target/ y __pycache__.
+    /**
+     * Copio recursivamente el contenido de una carpeta hacia otra ruta.
+     *
+     * Excluyo directorios habituales de artefactos (por ejemplo {@code target/} y {@code __pycache__/})
+     * para evitar aumentar el tamaño del ZIP con contenido generado.
+     *
+     * @param origen carpeta origen a copiar
+     * @param destino carpeta destino donde replico la estructura
+     * @throws IOException si ocurre un error de E/S al copiar
+     */
     private void copiarCarpeta(Path origen, Path destino) throws IOException {
         Path targetDir = origen.resolve("target");
 
         Files.walk(origen).forEach(sourcePath -> {
             try {
-                // Aquí ignoro target/ para no meter compilados de Maven/Gradle.
                 if (Files.exists(targetDir) && sourcePath.startsWith(targetDir)) return;
 
-                // Aquí ignoro __pycache__ para no meter caché de Python.
                 if (sourcePath.getFileName() != null && "__pycache__".equals(sourcePath.getFileName().toString())) return;
                 if (sourcePath.toString().contains(FileSystems.getDefault().getSeparator() + "__pycache__" + FileSystems.getDefault().getSeparator()))
                     return;
 
-                // Aquí calculo la ruta relativa para replicar la estructura exacta.
                 Path relative = origen.relativize(sourcePath);
                 Path targetPath = destino.resolve(relative);
 
-                // Aquí creo directorios o copio ficheros.
                 if (Files.isDirectory(sourcePath)) {
                     Files.createDirectories(targetPath);
                 } else {
@@ -207,27 +203,39 @@ public class ZipGeneratorService {
         });
     }
 
-    // En este método genero o copio el fichero de pipeline según el proveedor CI/CD que eligió el usuario.
+    /**
+     * Genero o copio el pipeline de CI/CD según el proveedor seleccionado en la aplicación.
+     *
+     * Para GitHub genero un workflow desde plantilla; para GitLab y Jenkins copio ficheros ya preparados.
+     *
+     * @param carpetaProyecto carpeta raíz del proyecto que estoy montando
+     * @param app aplicación con la configuración de CI/CD
+     * @param lenguaje lenguaje del proyecto (para resolver la ruta de plantillas)
+     * @throws IOException si ocurre un error al leer o escribir recursos
+     */
     private void generarPipelineCiCd(Path carpetaProyecto, Aplicacion app, Lenguaje lenguaje) throws IOException {
         ProveedorCiCd proveedor = app.getProveedorCiCd();
         if (proveedor == null) return;
 
-        // Aquí calculo la ruta base de recursos según el lenguaje (carpeta de plantillas).
         String base = resourceBase(lenguaje);
 
-        // Aquí genero o copio el pipeline concreto.
         switch (proveedor) {
             case GITHUB -> generarGithubWorkflow(carpetaProyecto, app, base);
             case GITLAB -> copiarRecursoClasspathAPath(base + ".gitlab-ci.yml", carpetaProyecto.resolve(".gitlab-ci.yml"));
             case JENKINS -> copiarRecursoClasspathAPath(base + "Jenkinsfile", carpetaProyecto.resolve("Jenkinsfile"));
             default -> {
-                // Aquí no hago nada si el proveedor no está soportado.
             }
         }
     }
 
-    // En este método creo un workflow de GitHub Actions a partir de una plantilla.
-    // Reemplazo __APP_NAME__ por el nombre real de la aplicación, normalizado, para evitar errores en nombres.
+    /**
+     * Genero un workflow de GitHub Actions a partir de una plantilla y sustituyo el nombre de aplicación.
+     *
+     * @param carpetaProyecto carpeta raíz del proyecto
+     * @param app aplicación con el nombre a inyectar en la plantilla
+     * @param base ruta base de recursos para el lenguaje
+     * @throws IOException si ocurre un error al leer la plantilla o escribir el workflow
+     */
     private void generarGithubWorkflow(Path carpetaProyecto, Aplicacion app, String base) throws IOException {
         String appNameSafe = slug(app.getNombre(), "mi-proyecto");
 
@@ -242,8 +250,17 @@ public class ZipGeneratorService {
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
-    // En este método genero el docker-compose.yml en función del motor de base de datos elegido.
-    // Uso plantillas distintas según el motor (mysql/postgres/mongo) y adapto el puerto expuesto de la app.
+    /**
+     * Genero el {@code docker-compose.yml} según el motor de base de datos elegido.
+     *
+     * Cargo la plantilla asociada al motor y sustituyo el placeholder {@code __APP_PORT__} por el puerto final
+     * de la aplicación. Si no existe plantilla específica del lenguaje, hago fallback a la ruta de Java.
+     *
+     * @param carpetaProyecto carpeta raíz del proyecto
+     * @param app aplicación con el motor de BD y el puerto
+     * @param lenguaje lenguaje del proyecto
+     * @throws IOException si ocurre un error al leer o escribir el compose
+     */
     private void generarDockerCompose(Path carpetaProyecto, Aplicacion app, Lenguaje lenguaje) throws IOException {
         TipoBaseDatos tipo = app.getTipoBaseDatos();
         if (tipo == null) return;
@@ -251,19 +268,16 @@ public class ZipGeneratorService {
         String nombrePlantilla = dockerComposePlantilla(tipo);
         if (nombrePlantilla == null) return;
 
-        // Aquí aplico un puerto por defecto diferente según lenguaje (por cómo tengo montadas las demos).
         String defaultPort = (lenguaje == Lenguaje.PYTHON) ? "8082" : "8081";
         String appPort = (app.getPuertoAplicacion() == null || app.getPuertoAplicacion() <= 0)
                 ? defaultPort
                 : String.valueOf(app.getPuertoAplicacion());
 
-        // Aquí primero intento cargar una plantilla específica del lenguaje; si no existe, hago fallback a java.
         String resourceLang = resourceBase(lenguaje) + nombrePlantilla;
         String template = existsOnClasspath(resourceLang)
                 ? leerRecursoClasspathComoString(resourceLang)
                 : leerRecursoClasspathComoString("static/ficherosjava/" + nombrePlantilla);
 
-        // Aquí reemplazo el placeholder del puerto para que el compose quede listo.
         String finalCompose = template.replace("__APP_PORT__", appPort);
 
         Path destino = carpetaProyecto.resolve("docker-compose.yml");
@@ -271,7 +285,12 @@ public class ZipGeneratorService {
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
-    // En este método traduzco el enum TipoBaseDatos a la plantilla concreta de docker-compose.
+    /**
+     * Traduzco el tipo de base de datos a la plantilla de docker-compose correspondiente.
+     *
+     * @param tipo tipo de base de datos
+     * @return nombre del fichero de plantilla o {@code null} si no existe correspondencia
+     */
     private String dockerComposePlantilla(TipoBaseDatos tipo) {
         if (tipo == null) return null;
         return switch (tipo.name().toUpperCase()) {
@@ -282,13 +301,20 @@ public class ZipGeneratorService {
         };
     }
 
-    // En este método genero un fichero app-config.properties para documentar la configuración elegida.
-    // Lo intento meter en src/main/resources si existe estructura de proyecto; si no, lo dejo en la raíz.
+    /**
+     * Genero un fichero {@code app-config.properties} con la configuración seleccionada.
+     *
+     * Si detecto una estructura típica de proyecto Java, lo guardo en {@code src/main/resources};
+     * en caso contrario lo guardo en la raíz del proyecto.
+     *
+     * @param carpetaProyecto carpeta raíz del proyecto
+     * @param app aplicación con los valores de configuración
+     * @throws IOException si ocurre un error al escribir el fichero
+     */
     private void generarAppConfigProperties(Path carpetaProyecto, Aplicacion app) throws IOException {
         Path resourcesDir = carpetaProyecto.resolve("src/main/resources");
         Path configFile;
 
-        // Aquí decido dónde guardarlo según exista la estructura típica de Java.
         if (Files.exists(resourcesDir) || Files.exists(carpetaProyecto.resolve("src"))) {
             Files.createDirectories(resourcesDir);
             configFile = resourcesDir.resolve("app-config.properties");
@@ -296,7 +322,6 @@ public class ZipGeneratorService {
             configFile = carpetaProyecto.resolve("app-config.properties");
         }
 
-        // Aquí escribo la configuración en formato propiedades.
         StringBuilder sb = new StringBuilder();
         sb.append("# Configuración generada por el Sistema de Gestión de Aplicaciones\n\n");
 
@@ -307,10 +332,7 @@ public class ZipGeneratorService {
 
         sb.append("\n# Base de datos\n");
         sb.append("app.baseDatos.tipo=").append(enumStr(app.getTipoBaseDatos())).append("\n");
-
-        // Aquí dejo el modo local por defecto si todavía no lo guardo en la entidad.
         sb.append("app.baseDatos.modo=local\n");
-
         sb.append("app.baseDatos.nombre=").append(s(app.getNombreBaseDatos())).append("\n");
         sb.append("app.baseDatos.usuario=").append(s(app.getUsuarioBaseDatos())).append("\n");
         sb.append("app.baseDatos.password=").append(s(app.getPasswordBaseDatos())).append("\n");
@@ -328,7 +350,13 @@ public class ZipGeneratorService {
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
-    // En este método comprimo una carpeta completa en un ZIP, manteniendo la estructura de subcarpetas.
+    /**
+     * Comprimo una carpeta completa en un fichero ZIP manteniendo la estructura de rutas relativa.
+     *
+     * @param carpeta carpeta a comprimir
+     * @param zipDestino ruta del ZIP final
+     * @throws IOException si ocurre un error al leer ficheros o escribir el ZIP
+     */
     private void comprimirCarpetaEnZip(Path carpeta, Path zipDestino) throws IOException {
         try (OutputStream fos = Files.newOutputStream(zipDestino);
              ZipOutputStream zos = new ZipOutputStream(fos)) {
@@ -337,12 +365,10 @@ public class ZipGeneratorService {
                 try {
                     if (Files.isDirectory(path)) return;
 
-                    // Aquí calculo la ruta interna del ZIP y la normalizo a formato unix (/).
                     Path relative = carpeta.relativize(path);
                     ZipEntry entry = new ZipEntry(relative.toString().replace("\\", "/"));
                     zos.putNextEntry(entry);
 
-                    // Aquí copio el contenido del fichero al ZIP.
                     try (InputStream is = Files.newInputStream(path)) {
                         is.transferTo(zos);
                     }
@@ -357,17 +383,33 @@ public class ZipGeneratorService {
         }
     }
 
-    // Aquí devuelvo la ruta base del classpath donde guardo las plantillas, dependiendo del lenguaje.
+    /**
+     * Devuelvo la ruta base del classpath donde busco plantillas según el lenguaje del proyecto.
+     *
+     * @param lenguaje lenguaje del proyecto
+     * @return ruta base dentro de resources
+     */
     private String resourceBase(Lenguaje lenguaje) {
         return (lenguaje == Lenguaje.PYTHON) ? "static/ficherospython/" : "static/ficherosjava/";
     }
 
-    // Aquí compruebo si existe un recurso en el classpath antes de intentar cargarlo.
+    /**
+     * Compruebo si un recurso existe en el classpath.
+     *
+     * @param resourcePath ruta del recurso
+     * @return {@code true} si existe, {@code false} en caso contrario
+     */
     private boolean existsOnClasspath(String resourcePath) {
         return getClass().getClassLoader().getResource(resourcePath) != null;
     }
 
-    // Aquí leo un recurso del classpath y lo convierto en String (para plantillas).
+    /**
+     * Leo un recurso del classpath y lo devuelvo como texto.
+     *
+     * @param resourcePath ruta del recurso
+     * @return contenido del recurso como String
+     * @throws IOException si ocurre un error al leer el recurso
+     */
     private String leerRecursoClasspathComoString(String resourcePath) throws IOException {
         ClassLoader cl = getClass().getClassLoader();
         try (InputStream is = cl.getResourceAsStream(resourcePath)) {
@@ -378,7 +420,13 @@ public class ZipGeneratorService {
         }
     }
 
-    // Aquí copio un recurso del classpath a un fichero real dentro de la carpeta del proyecto.
+    /**
+     * Copio un recurso del classpath a una ruta del sistema de ficheros.
+     *
+     * @param resourcePath recurso en classpath
+     * @param destino ruta destino dentro del proyecto generado
+     * @throws IOException si ocurre un error al copiar el recurso
+     */
     private void copiarRecursoClasspathAPath(String resourcePath, Path destino) throws IOException {
         ClassLoader cl = getClass().getClassLoader();
         try (InputStream is = cl.getResourceAsStream(resourcePath)) {
@@ -390,7 +438,11 @@ public class ZipGeneratorService {
         }
     }
 
-    // Aquí elimino el directorio temporal (y todo su contenido) para liberar espacio en el servidor.
+    /**
+     * Elimino un directorio temporal y todo su contenido.
+     *
+     * @param tempDir directorio temporal a eliminar
+     */
     private void limpiarTemp(Path tempDir) {
         try {
             Files.walk(tempDir)
@@ -405,18 +457,35 @@ public class ZipGeneratorService {
         }
     }
 
-    // Aquí limpio cadenas para meterlas en un properties sin saltos de línea raros.
+    /**
+     * Normalizo un texto para guardarlo en un fichero de propiedades evitando saltos de línea.
+     *
+     * @param value valor original
+     * @return valor normalizado
+     */
     private String s(String value) {
         return value == null ? "" : value.replace("\n", " ").replace("\r", " ");
     }
 
-    // Aquí convierto un enum a String de forma segura para el properties.
+    /**
+     * Convierto un enum a String de forma segura.
+     *
+     * @param e enum
+     * @return nombre del enum o cadena vacía si es {@code null}
+     */
     private String enumStr(Enum<?> e) {
         return e == null ? "" : e.name();
     }
 
-    // Aquí genero un "slug" seguro para nombres de carpetas y proyectos:
-    // quito tildes, caracteres raros, dejo minúsculas y uso '-' como separador.
+    /**
+     * Genero un identificador seguro para nombres de carpeta y fichero.
+     *
+     * Elimino tildes, normalizo a minúsculas y sustituyo caracteres no válidos por guiones.
+     *
+     * @param value valor de entrada
+     * @param defaultValue valor por defecto si la entrada está vacía
+     * @return slug seguro para rutas
+     */
     private String slug(String value, String defaultValue) {
         String base = (value == null || value.isBlank()) ? defaultValue : value.trim().toLowerCase();
         base = Normalizer.normalize(base, Normalizer.Form.NFD).replaceAll("\\p{M}", "");

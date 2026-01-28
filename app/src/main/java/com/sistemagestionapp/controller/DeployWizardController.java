@@ -17,6 +17,19 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URI;
 import java.util.*;
 
+/**
+ * En este controlador gestiono el asistente de despliegue (wizard) y su navegación por pasos.
+ *
+ * Me encargo de:
+ * - renderizar las pantallas de cada paso,
+ * - validar y confirmar acciones del usuario,
+ * - persistir la configuración asociada a cada paso,
+ * - y registrar el estado de ejecución mediante {@link ControlDespliegue}.
+ *
+ * Aplico control de flujo bloqueando el acceso a un paso si el paso previo no está en estado {@link EstadoControl#OK}.
+ *
+ * @author David Tomé Arnaiz
+ */
 @Controller
 @RequestMapping("/wizard")
 public class DeployWizardController {
@@ -26,6 +39,15 @@ public class DeployWizardController {
     private final AplicacionRepository aplicacionRepository;
     private final ControlDespliegueRepository controlDespliegueRepository;
 
+    /**
+     * En este constructor inyecto los servicios y repositorios necesarios para gestionar el asistente.
+     *
+     * @param deployWizardService servicio con la lógica principal del asistente
+     * @param paso6PdfService servicio encargado de generar la guía PDF de base de datos
+     * @param aplicacionRepository repositorio de acceso a {@link Aplicacion}
+     * @param controlDespliegueRepository repositorio de acceso a {@link ControlDespliegue}
+     * @author David Tomé Arnaiz
+     */
     public DeployWizardController(DeployWizardService deployWizardService,
                                   Paso6PdfService paso6PdfService,
                                   AplicacionRepository aplicacionRepository,
@@ -37,10 +59,12 @@ public class DeployWizardController {
         this.controlDespliegueRepository = controlDespliegueRepository;
     }
 
-    /* =========================================================
-       ✅ UTILIDADES COMUNES
-       ========================================================= */
-
+    /**
+     * En este método traduzco un {@link PasoDespliegue} al identificador de ruta utilizado en el asistente.
+     *
+     * @param paso paso lógico del asistente
+     * @return nombre del segmento de ruta asociado (por ejemplo, "paso3")
+     */
     private String toPath(PasoDespliegue paso) {
         return switch (paso) {
             case PRIMER_COMMIT -> "paso0";
@@ -55,8 +79,11 @@ public class DeployWizardController {
     }
 
     /**
-     * Bloquea si el paso previo al "pasoActual" no está en OK.
-     * Requiere PasoDespliegue#getPasoPrevio() correctamente definido.
+     * En este método impido el acceso al paso actual si el paso previo no está completado correctamente.
+     *
+     * @param appId identificador de la aplicación
+     * @param pasoActual paso al que se intenta acceder
+     * @return redirección al paso previo si no está en OK; en caso contrario, null
      */
     private String bloquearSiPrevioNoOk(Long appId, PasoDespliegue pasoActual) {
         PasoDespliegue previo = pasoActual.getPasoPrevio();
@@ -73,7 +100,11 @@ public class DeployWizardController {
     }
 
     /**
-     * Carga datos comunes y precarga campos desde BD para que no se "pierdan" al navegar.
+     * En este método cargo en el modelo los atributos comunes de un paso y precargo los valores persistidos.
+     *
+     * @param model modelo de Spring MVC
+     * @param appId identificador de la aplicación
+     * @param paso paso actual del asistente
      */
     private void cargarModeloPaso(Model model, Long appId, PasoDespliegue paso) {
         model.addAttribute("appId", appId);
@@ -83,10 +114,8 @@ public class DeployWizardController {
 
         boolean pasoActualCompleto =
                 controlOpt.map(c -> c.getEstado() == EstadoControl.OK).orElse(false);
-
         model.addAttribute("pasoActualCompleto", pasoActualCompleto);
 
-        // Cargamos la aplicación solo cuando realmente hace falta
         Aplicacion app = null;
         boolean necesitaApp =
                 paso == PasoDespliegue.SONAR_ANALISIS ||
@@ -99,7 +128,6 @@ public class DeployWizardController {
             app = deployWizardService.obtenerAplicacion(appId);
         }
 
-        // ✅ PRECARGA PASO 1 (SONAR)
         if (paso == PasoDespliegue.SONAR_ANALISIS) {
             String sonarHost =
                     (app.getSonarHostUrl() != null && !app.getSonarHostUrl().isBlank())
@@ -112,13 +140,11 @@ public class DeployWizardController {
             model.addAttribute("sonarToken", app.getSonarToken());
         }
 
-        // ✅ PRECARGA PASO 2 (projectKey)
         if (paso == PasoDespliegue.SONAR_INTEGRACION_GIT) {
             String projectKey = deployWizardService.obtenerProjectKey(appId);
             model.addAttribute("projectKey", projectKey);
         }
 
-        // ✅ PRECARGA PASO 3 (repo)
         if (paso == PasoDespliegue.REPOSITORIO_GIT) {
             model.addAttribute("repositorioGit", app.getRepositorioGit());
 
@@ -128,14 +154,9 @@ public class DeployWizardController {
             model.addAttribute("proveedor", prov);
         }
 
-        // ✅ PRECARGA PASO 4 (AWS/ECR) + TAG default latest
         if (paso == PasoDespliegue.IMAGEN_ECR) {
-
-            // ✅ ECR repo: intenta primero ecrRepository; si está vacío, usa nombreImagenEcr (fallback)
             String repo = (app.getEcrRepository() != null) ? app.getEcrRepository().trim() : "";
             if (repo.isBlank()) {
-                // si tu entidad tiene este getter, lo usamos como plan B
-                // (según tu DB/logs existe nombre_imagen_ecr)
                 repo = (app.getNombreImagenEcr() != null) ? app.getNombreImagenEcr().trim() : "";
             }
             model.addAttribute("ecrRepository", repo);
@@ -145,23 +166,19 @@ public class DeployWizardController {
             model.addAttribute("awsSecretAccessKey", app.getAwsSecretAccessKey());
             model.addAttribute("awsAccountId", app.getAwsAccountId());
 
-            // IMAGE_TAG: si está vacío -> latest
             String tag = (app.getImageTag() != null && !app.getImageTag().isBlank())
                     ? app.getImageTag().trim()
                     : "latest";
             model.addAttribute("imageTag", tag);
         }
 
-        // ✅ PRECARGA PASO 5 (BBDD)
         if (paso == PasoDespliegue.BASE_DATOS) {
 
-            // mode: local / remote
             String mode = (app.getDbModo() != null)
                     ? app.getDbModo().name().toLowerCase()
                     : "local";
             model.addAttribute("dbMode", mode);
 
-            // engine: postgres / mysql / mongo
             String engine = "postgres";
             if (app.getTipoBaseDatos() != null) {
                 engine = switch (app.getTipoBaseDatos()) {
@@ -175,40 +192,48 @@ public class DeployWizardController {
             model.addAttribute("dbName", app.getNombreBaseDatos());
             model.addAttribute("dbUser", app.getUsuarioBaseDatos());
 
-            // contraseña: por seguridad NO precargar
             model.addAttribute("dbPassword", null);
 
-            // endpoint / puerto: precargar desde entidad (si existen)
             model.addAttribute("dbEndpoint", app.getDbEndpoint());
             model.addAttribute("dbPort", app.getDbPort());
         }
 
-        // ✅ PRECARGA PASO 6 (EC2)
         if (paso == PasoDespliegue.DESPLIEGUE_EC2) {
-
-            // Para que funcionen: app.ec2Host, app.ec2User, app.ec2KnownHosts, etc.
             model.addAttribute("app", app);
-
-            // Puerto que tú quieres (puerto_aplicacion)
             model.addAttribute("appPort", app.getPuertoAplicacion());
         }
     }
 
+    /**
+     * En este método recupero una aplicación por id y lanzo una excepción si no existe.
+     *
+     * @param appId identificador de la aplicación
+     * @return aplicación encontrada
+     */
     private Aplicacion getAppOrThrow(Long appId) {
         return aplicacionRepository.findById(appId)
                 .orElseThrow(() -> new IllegalArgumentException("Aplicación no encontrada: " + appId));
     }
 
-    /* =========================================================
-       ✅ PASO 0 - PRIMER COMMIT
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso inicial del asistente (primer commit).
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 0
+     */
     @GetMapping("/paso0")
     public String paso0(@RequestParam Long appId, Model model) {
         cargarModeloPaso(model, appId, PasoDespliegue.PRIMER_COMMIT);
         return "wizard/paso0";
     }
 
+    /**
+     * En este endpoint valido el formato del hash de commit.
+     *
+     * @param commitHash hash introducido por el usuario
+     * @return mapa con el estado y un mensaje informativo
+     */
     @PostMapping(value = "/paso0/validar",
             consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
@@ -228,6 +253,13 @@ public class DeployWizardController {
         return out;
     }
 
+    /**
+     * En este endpoint confirmo el paso 0 y registro su finalización.
+     *
+     * @param appId identificador de la aplicación
+     * @param commitHash hash del commit (opcional)
+     * @return redirección al paso 1
+     */
     @PostMapping("/paso0/confirmar")
     public String confirmarPaso0(@RequestParam Long appId,
                                  @RequestParam(required = false) String commitHash) {
@@ -241,10 +273,13 @@ public class DeployWizardController {
         return "redirect:/wizard/paso1?appId=" + appId;
     }
 
-    /* =========================================================
-       ✅ PASO 1 - SONAR (variables + confirmación)
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de configuración de Sonar.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 1
+     */
     @GetMapping("/paso1")
     public String paso1(@RequestParam Long appId, Model model) {
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.SONAR_ANALISIS);
@@ -252,22 +287,30 @@ public class DeployWizardController {
 
         Aplicacion app = getAppOrThrow(appId);
 
-        // Control del paso (SIEMPRE por appId + paso)
         var controlPaso = controlDespliegueRepository
                 .findByAplicacionIdAndPaso(appId, PasoDespliegue.SONAR_ANALISIS)
                 .orElse(null);
 
         model.addAttribute("appId", appId);
-        model.addAttribute("app", app); // <-- CLAVE: usar app en la vista
+        model.addAttribute("app", app);
         model.addAttribute("controlPaso", controlPaso);
 
-        // Si usas lógica de bloqueo en la vista:
         boolean pasoActualCompleto = controlPaso != null && controlPaso.getEstado() == EstadoControl.OK;
         model.addAttribute("pasoActualCompleto", pasoActualCompleto);
 
         return "wizard/paso1";
     }
 
+    /**
+     * En este endpoint guardo la configuración de Sonar y marco el paso como completado.
+     *
+     * @param appId identificador de la aplicación
+     * @param sonarHostUrl URL del servidor de Sonar (o SonarCloud)
+     * @param sonarOrganization organización/proyecto en Sonar
+     * @param projectKey clave de proyecto
+     * @param sonarToken token de acceso
+     * @return respuesta vacía en caso de éxito
+     */
     @PostMapping("/paso1/confirmar")
     public ResponseEntity<Void> confirmarPaso1(@RequestParam Long appId,
                                                @RequestParam String sonarHostUrl,
@@ -292,16 +335,19 @@ public class DeployWizardController {
                 appId,
                 PasoDespliegue.SONAR_ANALISIS,
                 EstadoControl.OK,
-                "SonarCloud configurado. Project Key: " + pk
+                "Sonar configurado. Project Key: " + pk
         );
 
         return ResponseEntity.noContent().build();
     }
 
-    /* =========================================================
-       ✅ PASO 2 - INTEGRACIÓN SONAR ↔ GIT
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de integración Sonar ↔ Git.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 2
+     */
     @GetMapping("/paso2")
     public String paso2(@RequestParam Long appId, Model model) {
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.SONAR_INTEGRACION_GIT);
@@ -311,6 +357,13 @@ public class DeployWizardController {
         return "wizard/paso2";
     }
 
+    /**
+     * En este endpoint confirmo el paso de integración Sonar ↔ Git y registro su estado.
+     *
+     * @param appId identificador de la aplicación
+     * @param projectKey clave de proyecto (opcional)
+     * @return redirección al paso 3
+     */
     @PostMapping("/paso2/confirmar")
     public String confirmarPaso2(@RequestParam Long appId,
                                  @RequestParam(required = false) String projectKey) {
@@ -332,10 +385,13 @@ public class DeployWizardController {
         return "redirect:/wizard/paso3?appId=" + appId;
     }
 
-    /* =========================================================
-       ✅ PASO 3 - REPOSITORIO GIT
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de configuración del repositorio Git.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 3
+     */
     @GetMapping("/paso3")
     public String paso3(@RequestParam Long appId, Model model) {
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.REPOSITORIO_GIT);
@@ -343,13 +399,10 @@ public class DeployWizardController {
 
         cargarModeloPaso(model, appId, PasoDespliegue.REPOSITORIO_GIT);
 
-        // ✅ Autocompletar owner/repo desde la URL guardada al crear la app
         Aplicacion app = deployWizardService.getAppOrThrow(appId);
 
-        String repoUrlOrSlug = app.getRepositorioGit(); // puede ser URL o slug
+        String repoUrlOrSlug = app.getRepositorioGit();
         String repoSugerido = RepoSlugUtil.toSlug(repoUrlOrSlug);
-
-        // si no se reconoce, al menos dejamos lo que haya (si el usuario guardó ya "owner/repo")
         if (repoSugerido == null) repoSugerido = (repoUrlOrSlug == null ? "" : repoUrlOrSlug.trim());
 
         model.addAttribute("repoSugerido", repoSugerido);
@@ -357,6 +410,14 @@ public class DeployWizardController {
         return "wizard/paso3";
     }
 
+    /**
+     * En este endpoint guardo el proveedor CI/CD y el repositorio normalizado (owner/repo).
+     *
+     * @param appId identificador de la aplicación
+     * @param proveedor proveedor de CI/CD (por ejemplo, github o gitlab)
+     * @param repo repositorio en formato URL o slug
+     * @return redirección al paso 4
+     */
     @PostMapping("/paso3/confirmar")
     public String confirmarPaso3(@RequestParam Long appId,
                                  @RequestParam String proveedor,
@@ -365,7 +426,6 @@ public class DeployWizardController {
         String prov = (proveedor == null ? "" : proveedor.trim().toLowerCase());
         String repoInput = (repo == null ? "" : repo.trim());
 
-        // ✅ Convertir URL -> owner/repo si hace falta
         String repoNormalizado = RepoSlugUtil.toSlug(repoInput);
         if (repoNormalizado == null) repoNormalizado = repoInput;
 
@@ -379,7 +439,6 @@ public class DeployWizardController {
             return "redirect:/wizard/paso3?appId=" + appId;
         }
 
-        // Guardamos ya normalizado (owner/repo)
         deployWizardService.guardarRepoGit(appId, prov, repoNormalizado);
 
         deployWizardService.marcarPaso(
@@ -392,10 +451,13 @@ public class DeployWizardController {
         return "redirect:/wizard/paso4?appId=" + appId;
     }
 
-    /* =========================================================
-       ✅ PASO 4 - IMAGEN ECR
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de configuración de ECR y credenciales AWS.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 4
+     */
     @GetMapping("/paso4")
     public String paso4(@RequestParam Long appId, Model model) {
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.IMAGEN_ECR);
@@ -405,6 +467,11 @@ public class DeployWizardController {
         return "wizard/paso4";
     }
 
+    /**
+     * En este endpoint guardo las variables AWS/ECR y marco el paso como completado.
+     *
+     * @return respuesta vacía en caso de éxito
+     */
     @PostMapping("/paso4/confirmar")
     public ResponseEntity<Void> confirmarPaso4(@RequestParam Long appId,
                                                @RequestParam String ecrRepository,
@@ -439,10 +506,13 @@ public class DeployWizardController {
         return ResponseEntity.noContent().build();
     }
 
-    /* =========================================================
-       ✅ PASO 5 - BASE DATOS (PANTALLA)
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de configuración de base de datos.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 5
+     */
     @GetMapping("/paso5")
     public String paso5(@RequestParam Long appId, Model model) {
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.BASE_DATOS);
@@ -452,6 +522,11 @@ public class DeployWizardController {
         return "wizard/paso5";
     }
 
+    /**
+     * En este endpoint guardo la configuración de base de datos y marco el paso como completado.
+     *
+     * @return respuesta vacía en caso de éxito; en caso de validación fallida, 400
+     */
     @PostMapping("/paso5/confirmar")
     public ResponseEntity<Void> confirmarPaso5(@RequestParam Long appId,
                                                @RequestParam DbModo modo,
@@ -462,20 +537,17 @@ public class DeployWizardController {
                                                @RequestParam(required = false) Integer dbPort,
                                                @RequestParam(required = false) String dbEndpoint) {
 
-        // Limpieza básica
         String name = dbName == null ? "" : dbName.trim();
         String user = dbUser == null ? "" : dbUser.trim();
         String pass = dbPassword == null ? "" : dbPassword.trim();
         String endpoint = dbEndpoint == null ? "" : dbEndpoint.trim();
 
-        // ✅ Reglas mínimas: lo importante para Mongo REMOTE es endpoint (DB_URI)
         if (name.isBlank() || modo == null || tipo == null) {
             deployWizardService.marcarPaso(appId, PasoDespliegue.BASE_DATOS, EstadoControl.KO,
                     "Completa DB_MODE, DB_ENGINE y DB_NAME.");
             return ResponseEntity.badRequest().build();
         }
 
-        // Si es REMOTE + MONGODB -> dbEndpoint debe ser la URI completa
         if (modo == DbModo.REMOTE && tipo == TipoBaseDatos.MONGODB) {
             if (endpoint.isBlank()) {
                 deployWizardService.marcarPaso(appId, PasoDespliegue.BASE_DATOS, EstadoControl.KO,
@@ -484,7 +556,6 @@ public class DeployWizardController {
             }
         }
 
-        // ✅ Aquí es donde se hace la llamada que tú preguntas:
         deployWizardService.guardarPaso5Bd(
                 appId,
                 modo,
@@ -502,10 +573,16 @@ public class DeployWizardController {
         return ResponseEntity.noContent().build();
     }
 
-
     /**
-     * Descarga el PDF de BD y marca automáticamente el paso 5 (BASE_DATOS) como OK.
-     * (Mapping conservado: /paso6/pdf, como venías usando en tu proyecto).
+     * En este endpoint genero y devuelvo la guía PDF de base de datos.
+     *
+     * Además, registro el paso de base de datos como completado cuando el usuario descarga el PDF.
+     *
+     * @param appId identificador de la aplicación
+     * @param mode modo de base de datos (local/remote)
+     * @param engine motor de base de datos (postgres/mysql/mongo)
+     * @param port puerto (opcional)
+     * @return PDF en formato binario como adjunto
      */
     @GetMapping(value = "/paso6/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
     public ResponseEntity<byte[]> descargarPdfPasoBaseDatos(
@@ -543,10 +620,13 @@ public class DeployWizardController {
                 .body(pdf);
     }
 
-    /* =========================================================
-       ✅ PASO 6 - DESPLIEGUE EC2
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el paso de configuración de despliegue en EC2.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista del paso 6
+     */
     @GetMapping("/paso6")
     public String paso6(@RequestParam Long appId, Model model) {
 
@@ -565,6 +645,11 @@ public class DeployWizardController {
         return "wizard/paso6";
     }
 
+    /**
+     * En este endpoint guardo las variables necesarias para el despliegue en EC2 y marco el paso como completado.
+     *
+     * @return respuesta vacía en caso de éxito; en caso de validación fallida, 400
+     */
     @PostMapping("/paso6/confirmar")
     public ResponseEntity<Void> confirmarPaso6(@RequestParam Long appId,
                                                @RequestParam String ec2Host,
@@ -608,17 +693,19 @@ public class DeployWizardController {
         return ResponseEntity.noContent().build();
     }
 
-    /* =========================================================
-       ✅ RESUMEN + DESCARGA VARIABLES
-       ========================================================= */
-
+    /**
+     * En este endpoint muestro el resumen del asistente con el estado de cada paso.
+     *
+     * @param appId identificador de la aplicación
+     * @param model modelo de Spring MVC
+     * @return vista de resumen
+     */
     @GetMapping("/resumen")
     public String resumen(@RequestParam Long appId, Model model) {
 
         String redir = bloquearSiPrevioNoOk(appId, PasoDespliegue.DESPLIEGUE_EC2);
         if (redir != null) return redir;
 
-        // ✅ IMPORTANTE: Cargar la app para que el HTML pueda pintar variables
         Aplicacion app = deployWizardService.getAppOrThrow(appId);
 
         List<ControlDespliegue> controles = deployWizardService.obtenerControlesOrdenados(appId);
@@ -638,10 +725,16 @@ public class DeployWizardController {
 
         model.addAttribute("appId", appId);
         model.addAttribute("pasos", pasos);
-        model.addAttribute("app", app); // ✅ clave
+        model.addAttribute("app", app);
         return "wizard/resumen";
     }
 
+    /**
+     * En este endpoint genero un fichero de texto con las variables agrupadas por pasos del asistente.
+     *
+     * @param appId identificador de la aplicación
+     * @return contenido del fichero como adjunto text/plain
+     */
     @GetMapping(value = "/resumen/variables-txt", produces = "text/plain; charset=UTF-8")
     public ResponseEntity<String> descargarVariablesTxt(@RequestParam Long appId) {
 
@@ -655,9 +748,6 @@ public class DeployWizardController {
         sb.append("Fecha: ").append(java.time.LocalDateTime.now()).append("\n");
         sb.append("appId: ").append(appId).append("\n\n");
 
-    /* =========================
-       PASO 1 - SONAR
-       ========================= */
         sb.append("========== PASO 1 - SONAR ==========\n");
         appendKv(sb, "SONAR_HOST_URL", app.getSonarHostUrl(), false);
         appendKv(sb, "SONAR_ORGANIZATION", app.getSonarOrganization(), false);
@@ -665,9 +755,6 @@ public class DeployWizardController {
         appendKv(sb, "SONAR_TOKEN", app.getSonarToken(), true);
         sb.append("\n");
 
-    /* =========================
-       PASO 4 - AWS / ECR
-       ========================= */
         sb.append("========== PASO 4 - AWS / ECR ==========\n");
         appendKv(sb, "ECR_REPOSITORY", app.getEcrRepository(), false);
         appendKv(sb, "AWS_REGION", app.getAwsRegion(), false);
@@ -676,16 +763,11 @@ public class DeployWizardController {
         appendKv(sb, "AWS_SECRET_ACCESS_KEY", app.getAwsSecretAccessKey(), true);
         sb.append("\n");
 
-    /* =========================
-       PASO 5 - BASE DE DATOS
-       ========================= */
         sb.append("========== PASO 5 - BASE DE DATOS ==========\n");
 
-        // DB_MODE
         String dbMode = (app.getDbModo() != null) ? app.getDbModo().name().toLowerCase() : null;
         appendKv(sb, "DB_MODE", dbMode, false);
 
-        // DB_ENGINE
         String engine = null;
         if (app.getTipoBaseDatos() != null) {
             engine = switch (app.getTipoBaseDatos()) {
@@ -696,52 +778,40 @@ public class DeployWizardController {
         }
         appendKv(sb, "DB_ENGINE", engine, false);
 
-        // DB_NAME siempre
         appendKv(sb, "DB_NAME", app.getNombreBaseDatos(), false);
 
         boolean modoRemote = (app.getDbModo() == DbModo.REMOTE);
 
-        // Puerto por defecto (si no lo guardaste)
         Integer port = app.getDbPort();
         if (port == null) port = defaultPort(engine);
 
-        // ====== CASOS SEGÚN MOTOR/MODO ======
-        // Queremos que SIEMPRE se vean todas y las no aplicables digan NO_CREAR
-
         if ("mongo".equals(engine)) {
-            // Mongo local / remoto
             appendKv(sb, "DB_PORT", port != null ? String.valueOf(port) : null, false);
 
             if (modoRemote) {
-                // ✅ Mongo REMOTE usa DB_URI (sale de dbEndpoint)
                 appendKv(sb, "DB_HOST", "NO_CREAR", false);
                 appendKv(sb, "DB_SSLMODE", "NO_CREAR", false);
 
-                String uri = app.getDbEndpoint(); // aquí guardas la URI completa
+                String uri = app.getDbEndpoint();
                 appendKv(sb, "DB_URI", (uri != null && !uri.isBlank()) ? uri : "NO_CREAR", false);
 
             } else {
-                // Mongo LOCAL
                 appendKv(sb, "DB_HOST", "mongo", false);
                 appendKv(sb, "DB_SSLMODE", "NO_CREAR", false);
                 appendKv(sb, "DB_URI", "NO_CREAR", false);
             }
 
-            // En tu guía estás usando DB_USER/DB_PASSWORD también para mongo
             appendKv(sb, "DB_USER", app.getUsuarioBaseDatos(), true);
             appendKv(sb, "DB_PASSWORD", app.getPasswordBaseDatos(), true);
 
         } else if ("postgres".equals(engine)) {
-            // Postgres local / remoto
             appendKv(sb, "DB_PORT", port != null ? String.valueOf(port) : null, false);
 
             if (modoRemote) {
-                // REMOTE: DB_HOST = endpoint guardado en dbEndpoint
                 appendKv(sb, "DB_HOST", valueOrNoCrear(app.getDbEndpoint()), false);
                 appendKv(sb, "DB_SSLMODE", "require", false);
                 appendKv(sb, "DB_URI", "NO_CREAR", false);
             } else {
-                // LOCAL
                 appendKv(sb, "DB_HOST", "postgres", false);
                 appendKv(sb, "DB_SSLMODE", "disable", false);
                 appendKv(sb, "DB_URI", "NO_CREAR", false);
@@ -751,7 +821,6 @@ public class DeployWizardController {
             appendKv(sb, "DB_PASSWORD", app.getPasswordBaseDatos(), true);
 
         } else if ("mysql".equals(engine)) {
-            // MySQL local / remoto
             appendKv(sb, "DB_PORT", port != null ? String.valueOf(port) : null, false);
 
             if (modoRemote) {
@@ -767,7 +836,6 @@ public class DeployWizardController {
             appendKv(sb, "DB_PASSWORD", app.getPasswordBaseDatos(), true);
 
         } else {
-            // Si no hay motor seleccionado
             appendKv(sb, "DB_PORT", "NO_CREAR", false);
             appendKv(sb, "DB_HOST", "NO_CREAR", false);
             appendKv(sb, "DB_SSLMODE", "NO_CREAR", false);
@@ -778,9 +846,6 @@ public class DeployWizardController {
 
         sb.append("\n");
 
-    /* =========================
-       PASO 6 - EC2
-       ========================= */
         sb.append("========== PASO 6 - EC2 ==========\n");
         appendKv(sb, "EC2_HOST", app.getEc2Host(), false);
         appendKv(sb, "EC2_USER", app.getEc2User(), false);
@@ -791,7 +856,7 @@ public class DeployWizardController {
         sb.append("\n========================================\n");
         sb.append("NOTA:\n");
         sb.append("- Los valores marcados como SECRET deben crearse como secretos en tu CI/CD.\n");
-        sb.append("- Si pone NO_CREAR, esa variable NO aplica en ese modo/motor.\n");
+        sb.append("- Si aparece NO_CREAR, esa variable no aplica en ese modo o motor.\n");
         sb.append("========================================\n");
 
         HttpHeaders headers = new HttpHeaders();
@@ -806,7 +871,16 @@ public class DeployWizardController {
                 .body(sb.toString());
     }
 
-    /** Imprime KEY=VALUE y marca # SECRET si aplica */
+    /**
+     * En este método añado una línea KEY=VALUE al fichero de variables.
+     *
+     * Si el valor es nulo o vacío no lo incluyo. Si la variable es sensible, la marco como SECRET en el comentario.
+     *
+     * @param sb acumulador del contenido
+     * @param key nombre de la variable
+     * @param value valor asociado
+     * @param secret indica si la variable debe tratarse como secreta
+     */
     private static void appendKv(StringBuilder sb, String key, String value, boolean secret) {
         if (value == null) return;
         String v = value.trim();
@@ -817,12 +891,24 @@ public class DeployWizardController {
         sb.append("\n");
     }
 
+    /**
+     * En este método devuelvo el valor recibido o "NO_CREAR" si es nulo o vacío.
+     *
+     * @param v valor a evaluar
+     * @return valor normalizado
+     */
     private static String valueOrNoCrear(String v) {
         if (v == null) return "NO_CREAR";
         String t = v.trim();
         return t.isBlank() ? "NO_CREAR" : t;
     }
 
+    /**
+     * En este método devuelvo el puerto por defecto según el motor de base de datos.
+     *
+     * @param engine motor normalizado (postgres/mysql/mongo)
+     * @return puerto por defecto o null si no aplica
+     */
     private static Integer defaultPort(String engine) {
         if (engine == null) return null;
         return switch (engine) {
@@ -833,31 +919,28 @@ public class DeployWizardController {
         };
     }
 
-
     /**
-     * Nombre típico del servicio en docker-compose para modo LOCAL.
-     * ⚠️ Ajusta si tus servicios se llaman diferente.
+     * DTO de apoyo para renderizar el resumen del asistente.
+     *
+     * En esta clase encapsulo la información necesaria para mostrar en la vista el número de paso,
+     * su título, el estado y el mensaje asociado.
+     *
+     * @author David Tomé Arnaiz
      */
-   /* private static String defaultLocalServiceName(String engine) {
-        if (engine == null) return null;
-        return switch (engine) {
-            case "postgres" -> "postgres";
-            case "mysql" -> "mysql";
-            case "mongo" -> "mongo";
-            default -> null;
-        };
-    }*/
-
-    /* =========================================================
-       DTO PARA EL RESUMEN
-       ========================================================= */
-
     public static class PasoView {
         private final int numero;
         private final String titulo;
         private final String estado;
         private final String mensaje;
 
+        /**
+         * En este constructor inicializo un paso del resumen con su información de presentación.
+         *
+         * @param numero número del paso en el asistente
+         * @param titulo título a mostrar
+         * @param estado estado textual
+         * @param mensaje mensaje asociado
+         */
         public PasoView(int numero, String titulo, String estado, String mensaje) {
             this.numero = numero;
             this.titulo = titulo;
@@ -865,6 +948,14 @@ public class DeployWizardController {
             this.mensaje = mensaje;
         }
 
+        /**
+         * En este método construyo un {@link PasoView} a partir del control persistido del paso.
+         *
+         * @param numero número del paso
+         * @param titulo título del paso
+         * @param c control persistido del paso (puede ser null)
+         * @return instancia lista para renderizarse en la vista
+         */
         public static PasoView of(int numero, String titulo, ControlDespliegue c) {
             if (c == null) {
                 return new PasoView(numero, titulo, "N/A", "Paso no ejecutado.");

@@ -5,6 +5,22 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * En esta entidad represento una aplicación gestionada por el sistema.
+ *
+ * Centralizo toda la información necesaria para el asistente de despliegue, incluyendo:
+ * - datos generales del proyecto,
+ * - configuración de SonarCloud,
+ * - repositorio Git y proveedor CI/CD,
+ * - variables de AWS/ECR,
+ * - configuración de base de datos,
+ * - y parámetros de despliegue en EC2.
+ *
+ * Cada instancia de esta entidad pertenece a un usuario y mantiene relación con los
+ * controles de estado de cada paso del asistente.
+ *
+ * @author David Tomé Arnaiz
+ */
 @Entity
 @Table(name = "aplicacion")
 public class Aplicacion {
@@ -17,23 +33,41 @@ public class Aplicacion {
        DATOS GENERALES
        ========================= */
 
+    /**
+     * Nombre identificativo de la aplicación.
+     */
     @Column(nullable = false, length = 150)
     private String nombre;
 
+    /**
+     * Descripción opcional de la aplicación.
+     */
     @Column(length = 500)
     private String descripcion;
 
+    /**
+     * Lenguaje principal de la aplicación.
+     */
     @Enumerated(EnumType.STRING)
     @Column(length = 30)
     private Lenguaje lenguaje;
 
+    /**
+     * Proveedor de CI/CD utilizado (por ejemplo, GitHub o GitLab).
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "proveedor_ci_cd", length = 30)
     private ProveedorCiCd proveedorCiCd;
 
+    /**
+     * Repositorio Git asociado a la aplicación.
+     */
     @Column(name = "repositorio_git", length = 255)
     private String repositorioGit;
 
+    /**
+     * Puerto público en el que se expone la aplicación.
+     */
     @Column(name = "puerto_aplicacion")
     private Integer puertoAplicacion;
 
@@ -41,33 +75,49 @@ public class Aplicacion {
        BASE DE DATOS (PASO 5)
        ========================= */
 
+    /**
+     * Tipo de base de datos utilizado.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_base_datos", length = 30)
     private TipoBaseDatos tipoBaseDatos;
 
+    /**
+     * Modo de base de datos (LOCAL o REMOTE).
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "db_modo", length = 20)
     private DbModo dbModo = DbModo.LOCAL;
 
+    /**
+     * Nombre de la base de datos.
+     */
     @Column(name = "nombre_base_datos", length = 120)
     private String nombreBaseDatos;
 
+    /**
+     * Usuario de acceso a la base de datos.
+     */
     @Column(name = "usuario_base_datos", length = 120)
     private String usuarioBaseDatos;
 
     /**
-     * Password de BD:
-     * - Guardada en TEXT (no @Lob) para evitar problemas en PostgreSQL
+     * Contraseña de la base de datos.
+     *
+     * La almaceno como TEXT para evitar problemas con Large Objects en PostgreSQL.
      */
     @Column(name = "password_base_datos", columnDefinition = "TEXT")
     private String passwordBaseDatos;
 
     /**
-     * (Opcional, según V10/V11)
+     * Puerto de conexión a la base de datos (opcional).
      */
     @Column(name = "db_port")
     private Integer dbPort;
 
+    /**
+     * Endpoint o URI de conexión a la base de datos en modo remoto.
+     */
     @Column(name = "db_endpoint", columnDefinition = "TEXT")
     private String dbEndpoint;
 
@@ -75,19 +125,28 @@ public class Aplicacion {
        SONAR (PASO 1)
        ========================= */
 
+    /**
+     * Project Key del proyecto en SonarCloud.
+     */
     @Column(name = "sonar_project_key", length = 255)
     private String sonarProjectKey;
 
+    /**
+     * URL del servidor de Sonar (por defecto SonarCloud).
+     */
     @Column(name = "sonar_host_url", length = 255)
     private String sonarHostUrl;
 
+    /**
+     * Organización de SonarCloud.
+     */
     @Column(name = "sonar_organization", length = 255)
     private String sonarOrganization;
 
     /**
-     * IMPORTANTE:
-     * No usar @Lob para evitar:
-     * "Large Objects may not be used in auto-commit mode"
+     * Token de acceso a SonarCloud.
+     *
+     * No utilizo @Lob para evitar problemas de auto-commit en PostgreSQL.
      */
     @Column(name = "sonar_token", columnDefinition = "TEXT")
     private String sonarToken;
@@ -97,32 +156,45 @@ public class Aplicacion {
        ========================= */
 
     /**
-     * Nombre del repositorio ECR (ej: mi-app)
+     * Nombre del repositorio ECR.
      */
     @Column(name = "ecr_repository", length = 255)
     private String ecrRepository;
 
     /**
-     * Nombre del repositorio/imagen en ECR (según tu UI)
+     * Nombre de la imagen Docker en ECR.
      */
     @Column(name = "nombre_imagen_ecr", length = 255)
     private String nombreImagenEcr;
 
+    /**
+     * Tag de la imagen Docker.
+     */
     @Column(name = "image_tag", length = 80)
     private String imageTag;
 
+    /**
+     * Región de AWS.
+     */
     @Column(name = "aws_region", length = 50)
     private String awsRegion;
 
+    /**
+     * Identificador de la cuenta AWS.
+     */
     @Column(name = "aws_account_id", length = 50)
     private String awsAccountId;
 
+    /**
+     * Access Key de AWS.
+     */
     @Column(name = "aws_access_key_id", length = 128)
     private String awsAccessKeyId;
 
     /**
-     * Clave secreta AWS
-     * Guardada como TEXT para evitar LO/OID en PostgreSQL
+     * Secret Access Key de AWS.
+     *
+     * La almaceno como TEXT para evitar problemas con OID en PostgreSQL.
      */
     @Column(name = "aws_secret_access_key", columnDefinition = "TEXT")
     private String awsSecretAccessKey;
@@ -131,6 +203,9 @@ public class Aplicacion {
        DESPLIEGUE
        ========================= */
 
+    /**
+     * Tipo de proyecto gestionado por el asistente.
+     */
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_proyecto", length = 30)
     private TipoProyecto tipoProyecto = TipoProyecto.CONFIG;
@@ -138,9 +213,16 @@ public class Aplicacion {
     /* =========================
        METADATOS
        ========================= */
+
+    /**
+     * Fecha de creación de la aplicación.
+     */
     @Column(name = "fecha_creacion", nullable = false, updatable = false)
     private LocalDateTime fechaCreacion;
 
+    /**
+     * Usuario propietario de la aplicación.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id")
     private Usuario propietario;
@@ -149,23 +231,39 @@ public class Aplicacion {
        EC2 (PASO 6)
        ========================= */
 
+    /**
+     * Host público de la instancia EC2.
+     */
     @Column(name = "ec2_host", length = 255)
     private String ec2Host;
 
+    /**
+     * Usuario SSH de la instancia EC2.
+     */
     @Column(name = "ec2_user", length = 100)
     private String ec2User;
 
+    /**
+     * Known hosts necesarios para evitar prompts SSH.
+     */
     @Column(name = "ec2_known_hosts", columnDefinition = "TEXT")
     private String ec2KnownHosts;
 
+    /**
+     * Clave privada SSH utilizada para el despliegue.
+     */
     @Column(name = "ec2_llave_ssh", columnDefinition = "TEXT")
     private String ec2LlaveSsh;
 
+    /**
+     * Puerto de la aplicación desplegada en EC2.
+     */
     @Column(name = "app_port")
     private Integer appPort;
 
-
-
+    /**
+     * Inicializo la fecha de creación antes de persistir la entidad.
+     */
     @PrePersist
     public void prePersist() {
         if (fechaCreacion == null) {
@@ -173,11 +271,13 @@ public class Aplicacion {
         }
     }
 
-
     /* =========================
        RELACIONES
        ========================= */
 
+    /**
+     * Controles de estado asociados a los pasos del asistente.
+     */
     @OneToMany(
             mappedBy = "aplicacion",
             cascade = CascadeType.ALL,
@@ -192,14 +292,15 @@ public class Aplicacion {
     public Aplicacion() {
     }
 
-
+    /**
+     * Normalizo valores por defecto antes de actualizar la entidad.
+     */
     @PreUpdate
     public void preUpdate() {
         normalizarDefaults();
     }
 
     private void normalizarDefaults() {
-        // Valor por defecto de SonarCloud
         if (sonarHostUrl == null || sonarHostUrl.isBlank()) {
             sonarHostUrl = "https://sonarcloud.io";
         }
@@ -210,10 +311,6 @@ public class Aplicacion {
             tipoProyecto = TipoProyecto.CONFIG;
         }
     }
-
-    /* =========================
-       GETTERS Y SETTERS
-       ========================= */
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }

@@ -9,15 +9,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Controlador REST encargado de los pasos del asistente
- * relacionados con la infraestructura AWS.
+ * En este controlador REST expongo endpoints del asistente de despliegue relacionados con infraestructura AWS.
  *
- * Desde aquí expongo endpoints que son llamados por AJAX
- * desde el asistente de despliegue para comprobar:
- * - La existencia de imágenes en Amazon ECR (Paso 4)
- * - La accesibilidad de una aplicación desplegada en EC2 (Paso 5)
+ * Me utilizan desde el frontend mediante llamadas AJAX para validar:
+ * - la existencia de imágenes en Amazon ECR,
+ * - y la accesibilidad de una aplicación desplegada en una instancia EC2.
  *
- * Devuelvo siempre un ResultadoPaso en formato JSON.
+ * Devuelvo siempre un {@link ResultadoPaso} en formato JSON para informar del estado del paso.
+ *
+ * @author David Tomé Arnaiz
  */
 @RestController
 @RequestMapping("/api/wizard")
@@ -27,9 +27,13 @@ public class AwsController {
     private final Ec2Service ec2Service;
 
     /**
-     * Inyecto los servicios de ECR y EC2.
-     * Toda la lógica de negocio se delega a estos servicios,
-     * manteniendo el controlador lo más ligero posible.
+     * En este constructor inyecto los servicios necesarios para trabajar con ECR y EC2.
+     *
+     * Mantengo el controlador centrado en la capa de presentación y delego la lógica de negocio en la capa de servicio.
+     *
+     * @param ecrService servicio con la lógica de validación relacionada con ECR
+     * @param ec2Service servicio con la lógica de validación relacionada con EC2
+     * @author David Tomé Arnaiz
      */
     public AwsController(EcrService ecrService, Ec2Service ec2Service) {
         this.ecrService = ecrService;
@@ -37,18 +41,15 @@ public class AwsController {
     }
 
     /**
-     * Paso 4 del asistente.
+     * En este endpoint valido el paso asociado a ECR comprobando la existencia de una imagen Docker.
      *
-     * Compruebo que existe una imagen Docker en Amazon ECR
-     * con el nombre de repositorio y el tag indicados.
+     * Verifico que, para el repositorio y tag indicados, existe una imagen disponible en Amazon ECR.
      *
-     * Este endpoint se llama desde el frontend cuando el usuario
-     * pulsa el botón "Comprobar" en el paso 4 del asistente.
-     *
-     * @param appId          identificador de la aplicación
+     * @param appId identificador de la aplicación
      * @param repositoryName nombre del repositorio en ECR
-     * @param imageTag       tag de la imagen (por ejemplo: latest o v1.0.0)
-     * @return ResultadoPaso con estado OK o KO y un mensaje explicativo
+     * @param imageTag tag de la imagen (por ejemplo, latest o v1.0.0)
+     * @return resultado de la comprobación del paso en formato JSON
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/paso4")
     public ResultadoPaso comprobarEcr(
@@ -60,21 +61,15 @@ public class AwsController {
     }
 
     /**
-     * Paso 5 del asistente.
+     * En este endpoint valido el paso asociado a EC2 comprobando la accesibilidad externa de la aplicación desplegada.
      *
-     * Compruebo que la aplicación desplegada en una instancia EC2
-     * es accesible desde el exterior.
-     *
-     * Realizo una comprobación de conectividad contra el host y puerto
-     * indicados, normalmente accediendo a la ruta raíz ("/").
-     *
-     * Este paso valida que el despliegue en EC2 se ha realizado
-     * correctamente y que la aplicación está en ejecución.
+     * Realizo la comprobación contra el host y el puerto indicados, normalmente consultando la ruta raíz ("/").
      *
      * @param appId identificador de la aplicación
-     * @param host  dirección IP o DNS público de la EC2
-     * @param port  puerto en el que escucha la aplicación
-     * @return ResultadoPaso con estado OK o KO y mensaje de resultado
+     * @param host dirección IP o DNS público de la instancia EC2
+     * @param port puerto en el que escucha la aplicación
+     * @return resultado de la comprobación del paso en formato JSON
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/paso5")
     public ResultadoPaso comprobarPaso5(

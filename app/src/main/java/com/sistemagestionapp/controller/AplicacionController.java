@@ -29,12 +29,19 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Controlador encargado de la gestión completa de las aplicaciones del usuario.
- * Desde aquí gestiono:
- * - El listado de aplicaciones
- * - La creación y edición
- * - El progreso del asistente de despliegue
- * - La descarga de variables y ficheros ZIP
+ * En este controlador gestiono el ciclo de vida de las aplicaciones del usuario autenticado.
+ *
+ * Me encargo de:
+ * - mostrar el listado de aplicaciones,
+ * - crear y editar aplicaciones,
+ * - eliminar aplicaciones,
+ * - exponer descargas (variables y ZIP),
+ * - y calcular el progreso del asistente de despliegue para cada aplicación.
+ *
+ * Todas las operaciones se ejecutan asociadas a un identificador de aplicación (appId) y valido el propietario
+ * para evitar accesos a recursos de otros usuarios.
+ *
+ * @author David Tomé Arnaiz
  */
 @Controller
 @RequestMapping("/aplicaciones")
@@ -56,10 +63,10 @@ public class AplicacionController {
     private ControlDespliegueRepository controlDespliegueRepository;
 
     /**
-     * PASOS REALES del asistente para calcular progreso.
-     * Excluyo RESUMEN_FINAL porque es un “estado calculado/visual”.
+     * En este conjunto defino los pasos que considero "reales" para calcular el progreso del asistente.
      *
-     * Ajusta este set EXACTAMENTE a los pasos que uses en tu wizard.
+     * Excluyo el paso {@link PasoDespliegue#RESUMEN_FINAL} porque lo trato como un estado visual o calculado,
+     * y no como un paso que el usuario complete.
      */
     private static final EnumSet<PasoDespliegue> PASOS_REALES = EnumSet.of(
             PasoDespliegue.PRIMER_COMMIT,
@@ -72,20 +79,24 @@ public class AplicacionController {
     );
 
     /**
-     * Muestro el listado de aplicaciones del usuario autenticado.
-     * ✅ Importante: TODO va por appId, así no se mezclan datos entre apps.
+     * En este endpoint muestro el listado de aplicaciones del usuario autenticado y calculo su progreso de despliegue.
+     *
+     * Construyo mapas indexados por appId con el progreso, el estado textual y el estado del resumen final,
+     * de forma que la vista pueda renderizar esta información sin mezclar datos entre aplicaciones.
+     *
+     * @param model modelo de Spring MVC que utilizo para pasar datos a la vista
+     * @param principal identidad del usuario autenticado
+     * @return nombre de la plantilla que renderiza el listado de aplicaciones
+     * @author David Tomé Arnaiz
      */
     @GetMapping
     public String listarAplicaciones(Model model, Principal principal) {
 
-        // 1) Usuario logueado
         String correo = principal.getName();
         Usuario propietario = usuarioService.obtenerPorCorreo(correo);
 
-        // 2) Solo aplicaciones de este usuario
         List<Aplicacion> aplicaciones = aplicacionService.listarPorPropietario(propietario);
 
-        // 3) Mapas por appId
         Map<Long, ProgresoDespliegue> progresoPorApp = new HashMap<>();
         Map<Long, String> estadoPorApp = new HashMap<>();
         Map<Long, EstadoControl> resumenFinalPorApp = new HashMap<>();
@@ -95,10 +106,8 @@ public class AplicacionController {
         for (Aplicacion app : aplicaciones) {
             Long appId = app.getId();
 
-            // Traigo todos los controles de ESA app
             List<ControlDespliegue> controles = controlDespliegueRepository.findByAplicacionIdOrderByPasoAsc(appId);
 
-            // Cuento OK solo en pasos reales (para que NO te “contamine” RESUMEN_FINAL)
             long ok = controles.stream()
                     .filter(c -> c.getPaso() != null && PASOS_REALES.contains(c.getPaso()))
                     .filter(c -> c.getEstado() == EstadoControl.OK)
@@ -116,7 +125,6 @@ public class AplicacionController {
             }
             estadoPorApp.put(appId, estado);
 
-            // (Opcional) estado del RESUMEN_FINAL si existe
             Optional<ControlDespliegue> resumen = controlDespliegueRepository.findByAplicacionIdAndPaso(
                     appId,
                     PasoDespliegue.RESUMEN_FINAL
@@ -127,14 +135,20 @@ public class AplicacionController {
         model.addAttribute("aplicaciones", aplicaciones);
         model.addAttribute("progresoPorApp", progresoPorApp);
         model.addAttribute("estadoPorApp", estadoPorApp);
-        model.addAttribute("resumenFinalPorApp", resumenFinalPorApp); // por si lo usas en UI
-        model.addAttribute("totalPasos", totalPasos); // ✅ para el HTML
+        model.addAttribute("resumenFinalPorApp", resumenFinalPorApp);
+        model.addAttribute("totalPasos", totalPasos);
 
         return "aplicaciones";
     }
 
     /**
-     * Formulario para crear una nueva aplicación.
+     * En este endpoint preparo el formulario para crear una nueva aplicación.
+     *
+     * Inicializo una instancia vacía y cargo los valores enumerados necesarios para los desplegables del formulario.
+     *
+     * @param model modelo de Spring MVC que utilizo para pasar datos a la vista
+     * @return nombre de la plantilla del formulario de aplicación
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/nueva")
     public String mostrarFormularioNueva(Model model) {
@@ -151,12 +165,19 @@ public class AplicacionController {
     }
 
     /**
-     * Formulario para editar una aplicación existente.
+     * En este endpoint preparo el formulario para editar una aplicación existente.
+     *
+     * Recupero la aplicación por id y valido que pertenezca al usuario autenticado antes de exponerla en la vista.
+     *
+     * @param id identificador de la aplicación a editar
+     * @param model modelo de Spring MVC que utilizo para pasar datos a la vista
+     * @param principal identidad del usuario autenticado
+     * @return nombre de la plantilla del formulario de aplicación
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/editar/{id}")
     public String mostrarFormularioEditar(@PathVariable Long id, Model model, Principal principal) {
 
-        // (Recomendado) validar ownership para que nadie edite apps de otros
         Aplicacion aplicacion = aplicacionService.obtenerPorId(id);
         validarPropietario(aplicacion, principal);
 
@@ -170,7 +191,15 @@ public class AplicacionController {
     }
 
     /**
-     * Descarga TXT con variables.
+     * En este endpoint genero y descargo un fichero de texto con las variables de configuración asociadas a una aplicación.
+     *
+     * Valido que la aplicación pertenezca al usuario autenticado y devuelvo el contenido como adjunto (text/plain).
+     *
+     * @param id identificador de la aplicación
+     * @param response respuesta HTTP donde escribo el fichero resultante
+     * @param principal identidad del usuario autenticado
+     * @throws IOException si se produce un error al escribir la respuesta
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/{id}/variables")
     public void descargarVariables(@PathVariable Long id, HttpServletResponse response, Principal principal) throws IOException {
@@ -189,7 +218,14 @@ public class AplicacionController {
     }
 
     /**
-     * Guardar aplicación nueva o editada.
+     * En este endpoint guardo una aplicación nueva o actualizo una existente.
+     *
+     * Asocio la aplicación al usuario autenticado y delego en la capa de servicio la persistencia.
+     *
+     * @param aplicacion entidad recibida desde el formulario
+     * @param principal identidad del usuario autenticado
+     * @return redirección al listado de aplicaciones
+     * @author David Tomé Arnaiz
      */
     @PostMapping("/guardar")
     public String guardarAplicacion(@ModelAttribute("aplicacion") Aplicacion aplicacion, Principal principal) {
@@ -204,7 +240,15 @@ public class AplicacionController {
     }
 
     /**
-     * Descarga ZIP de configuración.
+     * En este endpoint genero y descargo un ZIP con la configuración asociada a una aplicación.
+     *
+     * Valido que la aplicación pertenezca al usuario autenticado y delego la generación del ZIP en el servicio correspondiente.
+     *
+     * @param id identificador de la aplicación
+     * @param response respuesta HTTP donde escribo el ZIP resultante
+     * @param principal identidad del usuario autenticado
+     * @throws IOException si se produce un error durante la escritura de la respuesta
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/{id}/zip")
     public void descargarZip(@PathVariable Long id, HttpServletResponse response, Principal principal) throws IOException {
@@ -216,7 +260,14 @@ public class AplicacionController {
     }
 
     /**
-     * Eliminar aplicación.
+     * En este endpoint elimino una aplicación.
+     *
+     * Valido que la aplicación pertenezca al usuario autenticado antes de ejecutar el borrado.
+     *
+     * @param id identificador de la aplicación a eliminar
+     * @param principal identidad del usuario autenticado
+     * @return redirección al listado de aplicaciones
+     * @author David Tomé Arnaiz
      */
     @GetMapping("/eliminar/{id}")
     public String eliminarAplicacion(@PathVariable Long id, Principal principal) {
@@ -229,8 +280,13 @@ public class AplicacionController {
     }
 
     /**
-     * Helper: valida que la app pertenece al usuario logueado.
-     * (Evita que otro usuario vea/borre/descargue cosas de otra app)
+     * En este método valido que la aplicación pertenezca al usuario autenticado.
+     *
+     * Si el usuario no coincide con el propietario de la aplicación, bloqueo la operación lanzando una excepción.
+     *
+     * @param app aplicación sobre la que verifico el propietario
+     * @param principal identidad del usuario autenticado
+     * @author David Tomé Arnaiz
      */
     private void validarPropietario(Aplicacion app, Principal principal) {
         if (app == null || app.getPropietario() == null || principal == null) {
