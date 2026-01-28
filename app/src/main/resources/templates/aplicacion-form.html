@@ -2,177 +2,511 @@
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">
-        Nueva aplicación
-    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">Nueva aplicación</title>
+
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
 </head>
-<body class="container mt-5">
 
-<h2 class="mb-4"
-    th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">
-    Nueva aplicación
-</h2>
+<body class="bg-light">
 
-<form th:action="@{/aplicaciones/guardar}" th:object="${aplicacion}" method="post">
+<nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top" id="navTop">
+    <div class="container">
+        <span class="navbar-brand fw-semibold">Sistema de Gestión</span>
 
-    <input type="hidden" th:field="*{id}"/>
+        <div class="ms-auto d-flex align-items-center gap-2" id="navActions">
+            <a th:href="@{/aplicaciones}" class="btn btn-outline-secondary btn-sm">
+                Volver al listado
+            </a>
 
-    <!-- Sección Datos generales -->
-    <div class="card mb-3">
-        <div class="card-header">Datos generales</div>
-        <div class="card-body">
-
-            <div class="mb-3">
-                <label class="form-label">Nombre de la aplicación</label>
-                <input type="text" class="form-control" th:field="*{nombre}" required>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Descripción</label>
-                <textarea class="form-control" th:field="*{descripcion}" rows="3"></textarea>
-            </div>
-
-            <!-- SOLO se muestra si estamos editando una aplicación existente -->
-            <div class="mb-3" th:if="${aplicacion.id} != null">
-                <label class="form-label">Fecha de creación</label>
-                <input type="text"
-                       class="form-control"
-                       th:value="${#temporals.format(aplicacion.fechaCreacion, 'dd/MM/yyyy HH:mm')}"
-                       readonly>
-            </div>
-
+            <form th:action="@{/logout}" method="post" class="m-0">
+                <button type="submit" class="btn btn-outline-danger btn-sm">
+                    Cerrar sesión
+                </button>
+            </form>
         </div>
     </div>
+</nav>
 
-    <!-- Sección Tecnología -->
-    <div class="card mb-3">
-        <div class="card-header">Tecnología</div>
-        <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label d-block">Lenguaje</label>
-                <div class="form-check form-check-inline"
-                     th:each="len : ${lenguajes}">
-                    <input class="form-check-input"
-                           type="radio"
-                           th:field="*{lenguaje}"
-                           th:value="${len}">
-                    <label class="form-check-label"
-                           th:for="${#ids.prev('lenguaje')}"
-                           th:text="${len}">
-                        JAVA
-                    </label>
-                </div>
-            </div>
+<div class="container py-4">
 
-            <!-- Tipo de proyecto: por ahora solo informativo -->
-            <div class="mb-3">
-                <label class="form-label d-block">Tipo de proyecto</label>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipoProyecto"
-                           value="config" checked>
-                    <label class="form-check-label">Solo configuración</label>
-                </div>
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="tipoProyecto"
-                           value="demo">
-                    <label class="form-check-label">Demo app (opcional)</label>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Sección Base de datos -->
-    <div class="card mb-3">
-        <div class="card-header">Base de datos</div>
-        <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label">Tipo de base de datos</label>
-                <select class="form-select" th:field="*{tipoBaseDatos}">
-                    <option th:each="tipo : ${tiposBaseDatos}"
-                            th:value="${tipo}"
-                            th:text="${tipo}">
-                    </option>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Nombre BD</label>
-                <input type="text" class="form-control" th:field="*{nombreBaseDatos}">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Usuario BD</label>
-                <input type="text" class="form-control" th:field="*{usuarioBaseDatos}">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Password BD</label>
-                <input type="password" class="form-control" th:field="*{passwordBaseDatos}">
-            </div>
-        </div>
-    </div>
-
-    <!-- Sección CI/CD -->
-    <div class="card mb-3">
-        <div class="card-header">CI/CD</div>
-        <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label">Proveedor</label>
-                <select class="form-select" th:field="*{proveedorCiCd}">
-                    <option th:each="prov : ${proveedoresCiCd}"
-                            th:value="${prov}"
-                            th:text="${prov}">
-                    </option>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Repositorio Git</label>
-                <input type="text" class="form-control" th:field="*{repositorioGit}"
-                       placeholder="https://github.com/usuario/proyecto.git">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Sonar Project Key</label>
-                <input type="text" class="form-control" th:field="*{sonarProjectKey}">
-            </div>
-        </div>
-    </div>
-
-    <!-- Sección Despliegue -->
-    <div class="card mb-3">
-        <div class="card-header">Despliegue</div>
-        <div class="card-body">
-            <div class="mb-3">
-                <label class="form-label">Puerto interno de la app</label>
-                <input type="number" class="form-control" th:field="*{puertoAplicacion}">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Nombre imagen ECR (opcional)</label>
-                <input type="text" class="form-control" th:field="*{nombreImagenEcr}">
-                <small class="form-text text-muted">
-                    Si lo dejas vacío se podrá autogenerar más adelante.
-                </small>
-            </div>
-        </div>
-    </div>
-
-    <div class="d-flex justify-content-between">
-        <a th:href="@{/aplicaciones}" class="btn btn-secondary">Volver</a>
-
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3" id="headerNuevaApp">
         <div>
-            <button type="submit" class="btn btn-primary">Guardar</button>
-            <!-- De momento este botón hace lo mismo; luego lo conectaremos con el motor ZIP -->
-            <button type="submit" class="btn btn-success ms-2" name="accion" value="guardar_y_zip">
-                Guardar y generar ZIP
-            </button>
+            <h2 class="mb-0 fw-bold"
+                th:text="${aplicacion.id} != null ? 'Editar aplicación' : 'Nueva aplicación'">
+                Nueva aplicación
+            </h2>
+            <div class="text-muted">Completa la configuración y guarda para generar la plantilla.</div>
         </div>
+
+        <button id="inicio_tutorial"
+                type="button"
+                class="btn btn-outline-secondary btn-sm">
+            Iniciar tutorial
+        </button>
     </div>
 
-</form>
+    <!-- FORM PRINCIPAL -->
+    <form th:action="@{/aplicaciones/guardar}"
+          th:object="${aplicacion}"
+          method="post"
+          id="appForm"
+          novalidate>
+
+        <input type="hidden" th:field="*{id}"/>
+
+        <!-- Datos generales -->
+        <div class="card shadow-sm mb-3" id="card_generales">
+            <div class="card-header bg-white fw-semibold">Datos generales</div>
+            <div class="card-body">
+
+                <div class="mb-3">
+                    <label class="form-label">
+                        Nombre de la aplicación <span class="text-danger">*</span>
+                    </label>
+                    <input type="text"
+                           class="form-control"
+                           th:field="*{nombre}"
+                           id="appNombre"
+                           required
+                           minlength="2"
+                           maxlength="80"
+                           placeholder="ej: demo-java-git">
+                    <div class="invalid-feedback">
+                        El nombre es obligatorio.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Descripción</label>
+                    <textarea class="form-control"
+                              th:field="*{descripcion}"
+                              id="appDescripcion"
+                              rows="3"></textarea>
+                </div>
+
+                <div class="mb-3" th:if="${aplicacion.id} != null">
+                    <label class="form-label">Fecha de creación</label>
+                    <input type="text"
+                           class="form-control"
+                           th:value="${#temporals.format(aplicacion.fechaCreacion, 'dd/MM/yyyy HH:mm')}"
+                           readonly>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Tecnología -->
+        <div class="card shadow-sm mb-3" id="card_tecnologia">
+            <div class="card-header bg-white fw-semibold">Tecnología</div>
+            <div class="card-body">
+
+                <div class="mb-3" id="tipoProyecto_container">
+                    <label class="form-label d-block">
+                        Tipo de proyecto <span class="text-danger">*</span>
+                    </label>
+
+                    <div class="d-flex flex-wrap gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   th:field="*{tipoProyecto}"
+                                   th:value="CONFIG"
+                                   id="tpConfig"
+                                   required>
+                            <label class="form-check-label" for="tpConfig">Solo configuración</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   th:field="*{tipoProyecto}"
+                                   th:value="DEMO"
+                                   id="tpDemo"
+                                   required>
+                            <label class="form-check-label" for="tpDemo">Demo app (opcional)</label>
+                        </div>
+                    </div>
+
+                    <div class="form-text">
+                        Configuración: se generan ficheros de CI/CD + Docker adaptados al lenguaje.<br>
+                        Demo app: además se incluye una aplicación de ejemplo lista para desplegar.
+                    </div>
+
+                    <div class="invalid-feedback d-block" id="tpError" style="display:none;">
+                        Debes seleccionar un tipo de proyecto.
+                    </div>
+                </div>
+
+                <!-- Lenguaje -->
+                <div class="mb-0">
+                    <label class="form-label d-block">
+                        Lenguaje <span class="text-danger">*</span>
+                    </label>
+
+                    <div class="d-flex flex-wrap gap-3" id="lenguajeGroup">
+                        <div class="form-check" th:each="len : ${lenguajes}">
+                            <input class="form-check-input"
+                                   type="radio"
+                                   th:field="*{lenguaje}"
+                                   th:value="${len}"
+                                   required>
+                            <label class="form-check-label"
+                                   th:for="${#ids.prev('lenguaje')}"
+                                   th:text="${len}">JAVA</label>
+                        </div>
+                    </div>
+
+                    <div class="invalid-feedback d-block" id="lengError" style="display:none;">
+                        Debes seleccionar un lenguaje.
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Base de datos -->
+        <div class="card shadow-sm mb-3" id="card_bd">
+            <div class="card-header bg-white fw-semibold">Base de datos</div>
+            <div class="card-body">
+                <div class="row g-3">
+
+                    <div class="col-12">
+                        <label class="form-label">Tipo de base de datos</label>
+                        <select class="form-select" th:field="*{tipoBaseDatos}" id="tipoBaseDatos">
+                            <option th:each="tipo : ${tiposBaseDatos}"
+                                    th:value="${tipo}"
+                                    th:text="${tipo}">
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="col-12" id="dbModo_container">
+                        <label class="form-label d-block">Modo de base de datos</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <!-- DbModo enum => LOCAL/REMOTE -->
+                            <div class="form-check">
+                                <input class="form-check-input"
+                                       type="radio"
+                                       th:field="*{dbModo}"
+                                       th:value="LOCAL"
+                                       id="dbLocal">
+                                <label class="form-check-label" for="dbLocal">
+                                    Local (Docker / misma máquina)
+                                </label>
+                            </div>
+
+                            <div class="form-check">
+                                <input class="form-check-input"
+                                       type="radio"
+                                       th:field="*{dbModo}"
+                                       th:value="REMOTE"
+                                       id="dbRemote">
+                                <label class="form-check-label" for="dbRemote">
+                                    Remota (Cloud / Atlas / RDS)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Nombre BD</label>
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{nombreBaseDatos}"
+                               id="dbNombre">
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Usuario BD</label>
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{usuarioBaseDatos}"
+                               id="dbUsuario">
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Password BD</label>
+                        <input type="password"
+                               class="form-control"
+                               th:field="*{passwordBaseDatos}"
+                               id="dbPassword"
+                               autocomplete="new-password">
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- CI/CD -->
+        <div class="card shadow-sm mb-3" id="card_cicd">
+            <div class="card-header bg-white fw-semibold">CI/CD</div>
+            <div class="card-body">
+                <div class="row g-3">
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">
+                            Proveedor <span class="text-danger">*</span>
+                        </label>
+
+                        <select class="form-select"
+                                th:field="*{proveedorCiCd}"
+                                id="proveedorCiCd"
+                                required>
+                            <option value="" disabled
+                                    th:selected="${aplicacion.proveedorCiCd == null}">
+                                -- Selecciona --
+                            </option>
+                            <option th:each="prov : ${proveedoresCiCd}"
+                                    th:value="${prov}"
+                                    th:text="${prov}">
+                            </option>
+                        </select>
+
+                        <div class="invalid-feedback">
+                            Debes seleccionar un proveedor CI/CD.
+                        </div>
+
+                        <div class="form-text" id="proveedorHelp">
+                            GitHub/GitLab generan pipeline automáticamente. Jenkins genera un <code>Jenkinsfile</code> en el ZIP.
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-8">
+                        <label class="form-label" id="repoLabel">Repositorio Git</label>
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{repositorioGit}"
+                               id="repositorioGit"
+                               placeholder="https://github.com/usuario/proyecto.git">
+                        <div class="form-text" id="repoHelp">
+                            URL del repositorio donde se ejecutará el pipeline.
+                        </div>
+                    </div>
+
+                    <div class="col-12" id="sonarProjectKey_container">
+                        <label class="form-label">Sonar Project Key</label>
+                        <input type="text"
+                               class="form-control"
+                               th:field="*{sonarProjectKey}"
+                               id="sonarProjectKeyApp"
+                               autocomplete="off">
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Despliegue -->
+        <div class="card shadow-sm mb-4" id="card_despliegue">
+            <div class="card-header bg-white fw-semibold">Despliegue</div>
+            <div class="card-body">
+                <div class="row g-3">
+
+                    <div class="col-12 col-md-4">
+                        <label class="form-label">Puerto interno de la app</label>
+                        <input type="number"
+                               class="form-control"
+                               th:field="*{puertoAplicacion}"
+                               id="puertoAplicacion"
+                               placeholder="ej: 8081">
+                        <div class="form-text">
+                            Si no se especifica, se usará el puerto por defecto del proyecto.
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-8">
+                        <label class="form-label" for="nombreImagenEcr">Repositorio ECR</label>
+                        <input type="text"
+                               class="form-control"
+                               id="nombreImagenEcr"
+                               th:field="*{nombreImagenEcr}"
+                               placeholder="ej: demo-java-mongo">
+                        <div class="form-text">
+                            Nombre del repositorio en Amazon ECR (sin cuenta, región ni tag).
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Acciones -->
+        <div class="d-flex flex-wrap justify-content-between gap-2" id="acciones_footer">
+            <a th:href="@{/aplicaciones}" class="btn btn-outline-secondary">
+                Volver
+            </a>
+
+            <div class="d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary" id="btnGuardar">Guardar</button>
+            </div>
+        </div>
+
+    </form>
+</div>
+
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
+
+<script>
+    function aplicarUIProveedor() {
+        const select = document.getElementById('proveedorCiCd');
+        const repoLabel = document.getElementById('repoLabel');
+        const repoInput = document.getElementById('repositorioGit');
+        const repoHelp  = document.getElementById('repoHelp');
+        const provHelp  = document.getElementById('proveedorHelp');
+
+        if (!select || !repoLabel || !repoInput) return;
+
+        const prov = (select.value || '').toUpperCase();
+
+        if (prov === 'JENKINS') {
+            repoLabel.textContent = 'Repositorio (URL Git) para Jenkins';
+            repoInput.placeholder = 'https://gitlab.com/grupo/proyecto.git o https://github.com/usuario/proyecto.git';
+            repoHelp.textContent  = 'Jenkins hará checkout de este repositorio para ejecutar el Jenkinsfile.';
+            provHelp.innerHTML    = 'Jenkins generará un <code>Jenkinsfile</code> en la raíz del ZIP.';
+        } else if (prov === 'GITLAB') {
+            repoLabel.textContent = 'Repositorio Git (GitLab)';
+            repoInput.placeholder = 'https://gitlab.com/grupo/proyecto.git';
+            repoHelp.textContent  = 'URL del repositorio donde se ejecutará el .gitlab-ci.yml.';
+            provHelp.innerHTML    = 'GitLab generará un <code>.gitlab-ci.yml</code> en el ZIP.';
+        } else {
+            repoLabel.textContent = 'Repositorio Git (GitHub)';
+            repoInput.placeholder = 'https://github.com/usuario/proyecto.git';
+            repoHelp.textContent  = 'URL del repositorio donde se ejecutará el workflow de GitHub Actions.';
+            provHelp.innerHTML    = 'GitHub generará un workflow en <code>.github/workflows/</code>.';
+        }
+    }
+
+    function validarRadios(name) {
+        const nodes = document.querySelectorAll(`input[name="${name}"]`);
+        return Array.from(nodes).some(n => n.checked);
+    }
+
+    function setupIntroJsNuevaApp() {
+        const btn = document.getElementById('inicio_tutorial');
+        if (!btn) return;
+
+        const steps = [
+            {
+                title: "NUEVA APLICACIÓN",
+                intro: "Este formulario crea una aplicación en el sistema. Cada aplicación tendrá su propio asistente (wizard) con pasos independientes."
+            },
+            {
+                element: '#card_generales',
+                intro: "Datos generales: define nombre y descripción. El nombre es obligatorio."
+            },
+            {
+                element: '#appNombre',
+                intro: "Nombre de la aplicación: usa un nombre claro y único (ej: demo-java-jenkins)."
+            },
+            {
+                element: '#card_tecnologia',
+                intro: "Tecnología: elige tipo de proyecto y lenguaje. Esto decide qué plantilla se generará."
+            },
+            {
+                element: '#tipoProyecto_container',
+                intro: "Tipo de proyecto: CONFIG genera solo ficheros (CI/CD + Docker). DEMO añade una app de ejemplo."
+            },
+            {
+                element: '#lenguajeGroup',
+                intro: "Lenguaje: selecciona el lenguaje principal del proyecto."
+            },
+            {
+                element: '#card_bd',
+                intro: "Base de datos: selecciona el tipo y modo (local/remota) y rellena credenciales si aplica."
+            },
+            {
+                element: '#tipoBaseDatos',
+                intro: "Tipo de BD: PostgreSQL, MySQL, MongoDB, etc. según tu aplicación."
+            },
+            {
+                element: '#dbModo_container',
+                intro: "Modo de BD: LOCAL si va en Docker/misma máquina; REMOTE si va en cloud (RDS/Atlas)."
+            },
+            {
+                element: '#card_cicd',
+                intro: "CI/CD: selecciona el proveedor (GitHub/GitLab/Jenkins) y el repositorio."
+            },
+            {
+                element: '#proveedorCiCd',
+                intro: "Proveedor CI/CD: se generará GitHub Actions, GitLab CI o Jenkinsfile según lo elijas."
+            },
+            {
+                element: '#repositorioGit',
+                intro: "Repositorio Git: URL del repo donde se ejecutará el pipeline."
+            },
+            {
+                element: '#sonarProjectKeyApp',
+                intro: "Sonar Project Key: si ya lo conoces, puedes rellenarlo. Si no, se completará en el Paso 1 del wizard."
+            },
+            {
+                element: '#card_despliegue',
+                intro: "Despliegue: puerto interno y nombre del repositorio ECR (si despliegas en AWS)."
+            },
+            {
+                element: '#nombreImagenEcr',
+                intro: "Repositorio ECR: nombre en ECR sin cuenta, región ni tag."
+            },
+            {
+                element: '#btnGuardar',
+                intro: "Guardar: crea/actualiza la aplicación. Luego podrás entrar al wizard y completar los pasos."
+            }
+        ];
+
+        btn.addEventListener('click', function () {
+            this.style.animation = "none";
+            introJs().setOptions({
+                steps,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Terminar"
+            }).start();
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        aplicarUIProveedor();
+
+        const select = document.getElementById('proveedorCiCd');
+        if (select) select.addEventListener('change', aplicarUIProveedor);
+
+        const form = document.getElementById('appForm');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                const tpError = document.getElementById('tpError');
+                const lengError = document.getElementById('lengError');
+                if (tpError) tpError.style.display = 'none';
+                if (lengError) lengError.style.display = 'none';
+
+                let okCustom = true;
+
+                if (!validarRadios('tipoProyecto')) {
+                    if (tpError) tpError.style.display = 'block';
+                    okCustom = false;
+                }
+                if (!validarRadios('lenguaje')) {
+                    if (lengError) lengError.style.display = 'block';
+                    okCustom = false;
+                }
+
+                if (!form.checkValidity() || !okCustom) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+
+                form.classList.add('was-validated');
+            });
+        }
+
+        setupIntroJsNuevaApp();
+    });
+</script>
 
 </body>
 </html>

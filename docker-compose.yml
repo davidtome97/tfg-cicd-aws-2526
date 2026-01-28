@@ -1,48 +1,49 @@
-version: "3.8"
-
 services:
-  spring-app:
-    # Aquí levanto mi aplicación Spring Boot usando la imagen que me llega por variable.
-    image: ${IMAGE_URI}
-    container_name: spring-app
-    ports:
-      # Expongo el puerto 8080 de la app en el 80 de la máquina.
-      - "80:8080"
+  postgres:
+    image: postgres:16
+    container_name: sistemagestion-postgres
     environment:
-      # Configuración genérica de la base de datos. Si no me llegan variables
-      # desde fuera, uso estos valores por defecto.
-      DB_ENGINE: ${DB_ENGINE:-postgresql}
-      DB_HOST: ${DB_HOST:-postgres-db}
-      DB_PORT: ${DB_PORT:-5432}
-      DB_NAME: ${DB_NAME:-tfg}
-      DB_USER: ${DB_USER:-tfg}
-      DB_PASSWORD: ${DB_PASSWORD:-tfg}
-
-      # Propiedades que espera Spring para conectarse a la BD.
-      SPRING_DATASOURCE_URL: "jdbc:${DB_ENGINE}://${DB_HOST}:${DB_PORT}/${DB_NAME}"
-      SPRING_DATASOURCE_USERNAME: ${DB_USER}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-
-    # La app depende de que la base de datos esté levantada.
-    depends_on:
-      - postgres-db
-
-  # Servicio de PostgreSQL que uso como BD local o en la EC2.
-  postgres-db:
-    image: postgres:15
-    container_name: postgres-db
-    environment:
-      # Aquí reutilizo las mismas variables para que todo quede alineado.
-      POSTGRES_DB: ${DB_NAME:-tfg}
-      POSTGRES_USER: ${DB_USER:-tfg}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-tfg}
+      POSTGRES_DB: ${DB_NAME:-sistemagestion}
+      POSTGRES_USER: ${DB_USER:-app}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-app}
     ports:
-      # Expongo el puerto de PostgreSQL para poder conectarme desde fuera si lo necesito.
       - "5432:5432"
     volumes:
-      # Volumen para persistir los datos de la base de datos.
-      - postgres-data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-app} -d ${DB_NAME:-sistemagestion}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tfg-net
+    restart: unless-stopped
+
+  app:
+    image: ${IMAGE_URI:-sistemagestion-app}
+    container_name: sistemagestion-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      DB_ENGINE: postgres
+      DB_HOST: postgres
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-sistemagestion}
+      DB_USER: ${DB_USER:-app}
+      DB_PASSWORD: ${DB_PASSWORD:-app}
+      DB_SSLMODE: disable
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    networks:
+      - tfg-net
+    restart: unless-stopped
+
+networks:
+  tfg-net:
+    driver: bridge
 
 volumes:
-  # Volumen nombrado donde se guardan los datos de PostgreSQL.
-  postgres-data:
+  pgdata:

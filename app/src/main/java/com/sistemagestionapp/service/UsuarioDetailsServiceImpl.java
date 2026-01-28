@@ -3,46 +3,50 @@ package com.sistemagestionapp.service;
 import com.sistemagestionapp.model.Usuario;
 import com.sistemagestionapp.repository.UsuarioRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.userdetails.*;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
 
 /**
- * Esta clase la utilizo para integrar mi sistema de usuarios con Spring Security.
- * Implemento la interfaz {@link UserDetailsService} para que Spring pueda obtener
- * la información de un usuario cuando se intenta iniciar sesión.
+ * En esta clase integro mi sistema de usuarios con Spring Security.
  *
- * Busco al usuario en la base de datos utilizando su correo electrónico y devuelvo
- * un objeto {@link UserDetails} con sus credenciales y rol.
+ * Implemento {@link UserDetailsService} para que Spring Security pueda cargar los datos del usuario
+ * durante el proceso de autenticación. Busco el usuario por correo electrónico y, si existe, construyo
+ * un {@link UserDetails} con sus credenciales y una autoridad fija de tipo {@code USER}.
  *
- * @author David Tomé Arnáiz
+ * @author David Tomé Arnaiz
  */
 @Service
 public class UsuarioDetailsServiceImpl implements UserDetailsService {
 
-    /**
-     * Inyecto el repositorio de usuarios para poder buscar por correo electrónico.
-     */
     @Autowired
     private UsuarioRepository usuarioRepository;
 
     /**
-     * Este método lo invoca Spring Security automáticamente cuando alguien intenta iniciar sesión.
-     * Busco al usuario por su correo. Si no lo encuentro, lanzo una excepción. Si lo encuentro,
-     * construyo un {@link User} con su correo, contraseña y un rol fijo de "USER".
+     * Cargo los detalles de un usuario a partir de su correo electrónico.
      *
-     * @param correo el correo electrónico que se usa como nombre de usuario.
-     * @return los detalles del usuario necesarios para el proceso de autenticación.
-     * @throws UsernameNotFoundException si el usuario no se encuentra en la base de datos.
+     * Este método lo invoca Spring Security automáticamente cuando alguien intenta iniciar sesión.
+     * Si no encuentro el usuario, lanzo {@link UsernameNotFoundException}. Si lo encuentro, devuelvo
+     * un {@link UserDetails} con el correo, la contraseña cifrada y una autoridad {@code USER}.
+     *
+     * @param correo correo electrónico utilizado como identificador de usuario
+     * @return detalles del usuario necesarios para autenticación y autorización
+     * @throws UsernameNotFoundException si no existe un usuario con ese correo
      */
     @Override
     public UserDetails loadUserByUsername(String correo) throws UsernameNotFoundException {
         Usuario usuario = usuarioRepository.findByCorreo(correo)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
-    //crea un objeto USER que representa al usuario logueado.
-        return new User(usuario.getCorreo(), usuario.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority("USER")));
+
+        return new User(
+                usuario.getCorreo(),
+                usuario.getPassword(),
+                Collections.singletonList(new SimpleGrantedAuthority("USER"))
+        );
     }
 }

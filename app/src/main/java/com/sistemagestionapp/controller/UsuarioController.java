@@ -10,13 +10,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Controlador principal para gestionar las operaciones relacionadas con los usuarios del sistema.
+ * En este controlador gestiono las operaciones relacionadas con los usuarios del sistema.
+ *
  * Me encargo de:
- * - Mostrar el formulario de login.
- * - Listar usuarios.
- * - Crear nuevos usuarios.
- * - Editar y eliminar usuarios.
- * - Gestionar el registro de nuevos usuarios.
+ * - mostrar y procesar el login,
+ * - registrar nuevos usuarios,
+ * - y realizar operaciones básicas de administración (listar, crear, editar y eliminar).
+ *
+ * @author David Tomé Arnaiz
  */
 @Controller
 public class UsuarioController {
@@ -24,8 +25,16 @@ public class UsuarioController {
     @Autowired
     private UsuarioService usuarioService;
 
-    // ---------------- LOGIN ----------------
-
+    /**
+     * En este endpoint muestro el formulario de login y gestiono los mensajes de estado
+     * asociados a errores, cierre de sesión o registro correcto.
+     *
+     * @param error indicador de error de autenticación
+     * @param logout indicador de cierre de sesión correcto
+     * @param registro_ok indicador de registro exitoso
+     * @param model modelo de Spring MVC
+     * @return vista del formulario de login
+     */
     @GetMapping("/login")
     public String mostrarFormularioLogin(
             @RequestParam(value = "error", required = false) String error,
@@ -46,14 +55,31 @@ public class UsuarioController {
         return "login";
     }
 
-    // ---------------- REGISTRO ----------------
-
+    /**
+     * En este endpoint muestro el formulario de registro de usuarios.
+     *
+     * Inicializo una instancia vacía de {@link Usuario} para enlazarla con el formulario.
+     *
+     * @param model modelo de Spring MVC
+     * @return vista del formulario de registro
+     */
     @GetMapping("/registro")
     public String mostrarFormularioRegistro(Model model) {
         model.addAttribute("usuario", new Usuario());
         return "registro";
     }
 
+    /**
+     * En este endpoint proceso el registro de un nuevo usuario.
+     *
+     * Valido que las contraseñas coincidan y que el correo no exista previamente.
+     * La encriptación de la contraseña se delega a la capa de servicio.
+     *
+     * @param usuario datos del usuario a registrar
+     * @param passwordRepetida confirmación de la contraseña
+     * @param model modelo de Spring MVC
+     * @return redirección al login o vuelta al formulario en caso de error
+     */
     @PostMapping("/registro")
     public String registrarUsuario(@ModelAttribute("usuario") Usuario usuario,
                                    @RequestParam("passwordRepetida") String passwordRepetida,
@@ -69,14 +95,18 @@ public class UsuarioController {
             return "registro";
         }
 
-        // IMPORTANTE: aquí NO encripto, lo hará UsuarioService.guardarUsuario()
         usuarioService.guardarUsuario(usuario);
-
         return "redirect:/login?registro_ok";
     }
 
-    // ---------------- GESTIÓN USUARIOS ----------------
-
+    /**
+     * En este endpoint muestro el listado completo de usuarios del sistema.
+     *
+     * Este método se utiliza desde la parte de administración.
+     *
+     * @param model modelo de Spring MVC
+     * @return vista con el listado de usuarios
+     */
     @GetMapping("/usuarios")
     public String verUsuarios(Model model) {
         List<Usuario> usuarios = usuarioService.listarUsuarios();
@@ -84,6 +114,15 @@ public class UsuarioController {
         return "usuarios";
     }
 
+    /**
+     * En este endpoint creo un nuevo usuario desde el panel de administración.
+     *
+     * Verifico previamente que el correo no esté duplicado.
+     *
+     * @param usuario datos del nuevo usuario
+     * @param model modelo de Spring MVC
+     * @return redirección al listado de usuarios
+     */
     @PostMapping("/usuarios")
     public String crearUsuario(@ModelAttribute Usuario usuario, Model model) {
         if (usuarioService.existePorCorreo(usuario.getCorreo())) {
@@ -92,11 +131,17 @@ public class UsuarioController {
             return "usuarios";
         }
 
-        // Contraseña en texto plano → el servicio la encripta
         usuarioService.guardarUsuario(usuario);
         return "redirect:/usuarios";
     }
 
+    /**
+     * En este endpoint muestro el formulario de edición de un usuario existente.
+     *
+     * @param id identificador del usuario
+     * @param model modelo de Spring MVC
+     * @return vista del formulario de edición
+     */
     @GetMapping("/usuarios/editar/{id}")
     public String mostrarFormularioEditar(@PathVariable Long id, Model model) {
         Usuario usuario = usuarioService.obtenerUsuarioPorId(id);
@@ -104,15 +149,23 @@ public class UsuarioController {
         return "editar";
     }
 
+    /**
+     * En este endpoint actualizo los datos de un usuario.
+     *
+     * Si se introduce una nueva contraseña, la guardo encriptada; en caso contrario,
+     * conservo la contraseña previamente almacenada.
+     *
+     * @param usuario datos del usuario a actualizar
+     * @param password nueva contraseña (opcional)
+     * @return redirección al listado de usuarios
+     */
     @PostMapping("/usuarios/actualizar")
     public String actualizarUsuario(@ModelAttribute Usuario usuario,
                                     @RequestParam(required = false) String password) {
 
         if (password != null && !password.isBlank()) {
-            // Nueva contraseña en texto plano → el servicio la encripta
             usuario.setPassword(password);
         } else {
-            // Mantengo la contraseña anterior tal cual está en BD
             String anterior = usuarioService.obtenerUsuarioPorId(usuario.getId()).getPassword();
             usuario.setPassword(anterior);
         }
@@ -121,6 +174,12 @@ public class UsuarioController {
         return "redirect:/usuarios";
     }
 
+    /**
+     * En este endpoint elimino un usuario a partir de su identificador.
+     *
+     * @param id identificador del usuario a eliminar
+     * @return redirección al listado de usuarios
+     */
     @GetMapping("/usuarios/eliminar/{id}")
     public String eliminarUsuario(@PathVariable Long id) {
         usuarioService.eliminarUsuario(id);

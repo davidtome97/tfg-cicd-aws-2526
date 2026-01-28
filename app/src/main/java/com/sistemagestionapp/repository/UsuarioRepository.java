@@ -6,22 +6,24 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 /**
- * Esta interfaz la utilizo como repositorio para gestionar el acceso a los datos
- * de usuarios en la base de datos.
- * Heredo de {@link JpaRepository}, lo que me permite realizar operaciones CRUD sobre
- * la entidad {@link Usuario} sin necesidad de implementar los métodos básicos.
- * Además, he definido un método personalizado {@code findByCorreo} para buscar un
- * usuario a partir de su correo electrónico.
+ * En este repositorio gestiono el acceso a datos de la entidad {@link Usuario}.
  *
- * @author David Tomé Arnáiz
+ * Utilizo Spring Data JPA para realizar operaciones CRUD sobre los usuarios del sistema
+ * y defino métodos de consulta adicionales basados en el correo electrónico, que actúa
+ * como identificador único para la autenticación.
+ *
+ * @author David Tomé Arnaiz
  */
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 
     /**
-     * Busco un usuario en la base de datos a partir de su correo electrónico.
+     * Obtengo un usuario a partir de su correo electrónico.
      *
-     * @param correo correo electrónico del usuario que quiero buscar.
-     * @return un {@link Optional} que contiene el usuario si existe, o vacío si no se encuentra.
+     * Este método se utiliza principalmente durante el proceso de autenticación
+     * y para validar la existencia previa de un usuario en el registro.
+     *
+     * @param correo correo electrónico del usuario
+     * @return usuario encontrado, o {@link Optional#empty()} si no existe
      */
     Optional<Usuario> findByCorreo(String correo);
 }

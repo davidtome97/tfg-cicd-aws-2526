@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Paso 5 – Configurar Base de Datos</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
+
+    <meta name="appId" th:content="${appId}">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post" class="m-0">
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/aplicaciones}">
+            Sistema CI/CD – Paso 5
+        </a>
+    </div>
+</nav>
+
+<div class="container"
+     id="tutorial_root"
+     style="margin-bottom: 70px;"
+     th:attr="data-paso-completo=${pasoActualCompleto}">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div>
+            <h2 class="mb-0">Paso 5 – Configurar Base de Datos</h2>
+            <div class="text-muted" id="intro_texto">
+                Elige <b>modo</b> y <b>motor</b>. Después pulsa <b>Generar variables</b>:
+                eso marcará el paso como <b>OK</b>. El PDF queda como ayuda opcional.
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <a id="btnGuiaPaso"
+               href="/manuales/paso_5.pdf"
+               target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                📘 Ver guía de este paso
+            </a>
+
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
+    </div>
+
+    <div class="card p-4 shadow-sm" id="card_paso5">
+
+        <form id="formPaso5" autocomplete="off" onsubmit="return false;">
+            <input type="hidden" name="appId" th:value="${appId}"/>
+
+            <!-- =========================
+                 STEP 1: MODO/MOTOR/PUERTO + ENDPOINT
+                 ========================= -->
+            <div id="step1">
+                <div class="row g-3">
+                    <div class="col-md-4" id="mode_container">
+                        <label class="form-label" for="mode">Modo</label>
+                        <select id="mode" name="mode" class="form-select">
+                            <option value="local"  th:selected="${dbMode == 'local'}">local</option>
+                            <option value="remote" th:selected="${dbMode == 'remote'}">remote</option>
+                        </select>
+                        <div class="form-text">
+                            local = BD en docker-compose/EC2. remote = BD externa (RDS/Atlas).
+                        </div>
+                    </div>
+
+                    <div class="col-md-4" id="engine_container">
+                        <label class="form-label" for="engine">Motor</label>
+                        <select id="engine" name="engine" class="form-select">
+                            <option value="postgres" th:selected="${dbEngine == 'postgres'}">PostgreSQL</option>
+                            <option value="mysql"    th:selected="${dbEngine == 'mysql'}">MySQL</option>
+                            <option value="mongo"    th:selected="${dbEngine == 'mongo'}">MongoDB</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4" id="port_container">
+                        <label class="form-label" for="port">Puerto (opcional)</label>
+                        <input id="port" name="port" class="form-control"
+                               placeholder="Vacío = por defecto (5432/3306/27017)"
+                               th:value="${dbPort}">
+                        <div class="form-text">
+                            Si lo dejas vacío, se usará el puerto por defecto del motor.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ✅ Solo remote -->
+                <div class="row g-3 mt-1" id="remote_section" style="display:none;">
+                    <div class="col-12" id="remote_link_container">
+                        <label class="form-label" for="remoteLink">
+                            Conexión remote <span class="text-danger">*</span>
+                        </label>
+                        <input id="remoteLink" name="endpoint" class="form-control"
+                               placeholder="SQL: endpoint (mydb.xxxx.rds.amazonaws.com) | Mongo: mongodb+srv://cluster..."
+                               th:value="${dbEndpoint}">
+                        <div class="form-text">
+                            En remote:
+                            <b>Mongo</b> → se exportará como <code>DB_URI</code>.
+                            <b>Postgres/MySQL</b> → se exportará como <code>DB_HOST</code>.
+                        </div>
+                        <div class="invalid-feedback">
+                            En modo <b>remote</b> este campo es obligatorio.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex flex-wrap gap-2 align-items-center" id="acciones_step1">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            id="btn_ayuda"
+                            onclick="toggleAyuda()">
+                        Mostrar / Ocultar ayuda
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-outline-primary"
+                            id="btnContinuar">
+                        Continuar →
+                    </button>
+                </div>
+
+                <div id="ayuda" class="mt-4" style="display:none;">
+                    <hr>
+                    <div class="alert alert-info mb-0">
+                        <b>local</b>: docker-compose levanta la BD dentro de la EC2.<br>
+                        <b>remote</b>: la BD es externa (RDS / Atlas). Necesitas endpoint/URI y credenciales.
+                    </div>
+                </div>
+
+                <hr class="my-4">
+            </div>
+
+            <!-- =========================
+                 STEP 2: CREDENCIALES + VARIABLES (TABLA TIPO PASO 4)
+                 ========================= -->
+            <div id="step2" style="display:none;">
+
+                <p class="text-muted mb-2">
+                    Completa los datos para generar las <b>variables de base de datos</b>.
+                </p>
+
+                <div class="row g-3 mt-1" id="creds_container">
+                    <div class="col-md-4" id="db_name_container">
+                        <label class="form-label" for="dbName">
+                            Nombre BD (DB_NAME) <span class="text-danger">*</span>
+                        </label>
+                        <input id="dbName" name="dbName" class="form-control"
+                               placeholder="Ej: demo / sistemagestion"
+                               th:value="${dbName}"
+                               required>
+                        <div class="invalid-feedback">DB_NAME es obligatorio.</div>
+                    </div>
+
+                    <div class="col-md-4" id="db_user_container">
+                        <label class="form-label" for="dbUser">
+                            Usuario BD (DB_USER) <span class="text-danger">*</span>
+                        </label>
+                        <input id="dbUser" name="dbUser" class="form-control"
+                               placeholder="Ej: app"
+                               th:value="${dbUser}"
+                               required>
+                        <div class="invalid-feedback">DB_USER es obligatorio.</div>
+                    </div>
+
+                    <div class="col-md-4" id="db_pass_container">
+                        <label class="form-label" for="dbPassword">
+                            Contraseña BD (DB_PASSWORD) <span class="text-danger">*</span>
+                        </label>
+                        <input id="dbPassword" name="dbPassword" type="password"
+                               class="form-control"
+                               placeholder="Se guardará como secret"
+                               value=""
+                               required>
+                        <div class="form-text">No se mostrará en pantalla como texto plano.</div>
+                        <div class="invalid-feedback">DB_PASSWORD es obligatorio.</div>
+                    </div>
+                </div>
+
+                <div class="mt-4 d-flex flex-wrap gap-2" id="acciones_container">
+                    <!-- ✅ ESTE será el botón que pinta la tabla + guardará y pondrá OK (en el JS) -->
+                    <button type="button"
+                            class="btn btn-primary"
+                            id="btnGenerarVariables">
+                        Generar variables
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            id="btn_pdf_repeat">
+                        Descargar PDF (opcional)
+                    </button>
+                </div>
+
+                <!-- ✅ TABLA (como Paso 4) -->
+                <div id="varsSection" class="mt-4" style="display:none;">
+                    <hr>
+
+                    <div class="alert alert-warning py-2 mb-3">
+                        Ahora crea en tu repositorio estas variables. Las marcadas como <b>secret</b> van en Secrets.
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                            <tr>
+                                <th style="width: 260px;">Variable</th>
+                                <th>Valor</th>
+                                <th style="width: 120px;" class="text-end">Acción</th>
+                            </tr>
+                            </thead>
+                            <tbody id="varsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="form-text">
+                        Tip: usa “Copiar” para copiar el valor exacto (incluye secretos si el usuario los escribió).
+                    </div>
+                </div>
+
+                <hr class="my-4">
+            </div>
+
+            <!-- =========================
+                 ESTADO
+                 ========================= -->
+            <p class="mt-3 fs-5">
+                Estado:
+                <span id="estado"
+                      class="badge bg-secondary"
+                      th:text="${controlPaso != null ? controlPaso.estado : 'PENDIENTE'}">
+          PENDIENTE
+        </span>
+            </p>
+
+            <p id="mensaje"
+               class="text-muted mb-0"
+               th:text="${controlPaso != null
+              ? controlPaso.mensaje
+              : 'Completa el paso y genera las variables para marcarlo como OK.'}">
+            </p>
+
+        </form>
+    </div>
+
+    <!-- ⚠️ BLOQUEO -->
+    <div id="alertBloqueo"
+         th:if="${!pasoActualCompleto}"
+         class="alert alert-warning mt-3">
+        Debes completar este paso antes de continuar.
+    </div>
+
+    <!-- NAVEGACIÓN -->
+    <div class="mt-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
+
+        <a th:href="@{/wizard/paso4(appId=${appId})}"
+           class="btn btn-outline-secondary">
+            ← Volver al paso 4
+        </a>
+
+        <div class="text-end" id="navPaso6">
+
+            <a id="btnPaso6_ok"
+               class="btn btn-outline-secondary d-none"
+               th:href="@{/wizard/paso6(appId=${appId})}">
+                Ir al paso 6 →
+            </a>
+
+            <a id="btnPaso6_ko"
+               class="btn btn-outline-secondary disabled"
+               href="#"
+               aria-disabled="true">
+                Ir al paso 6 →
+            </a>
+
+            <div id="msgBloqueo"
+                 class="form-text text-danger mt-1">
+                Genera las variables para continuar.
+            </div>
+
+        </div>
+    </div>
+
+</div>
+
+<!-- ✅ IntroJS -->
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
+
+<script>
+    /* =========================================================
+       PASO 5 – SCRIPT FINAL (GENERAR VARIABLES marca OK)
+       Reglas:
+       - Siempre obligatorio: DB_NAME, DB_USER, DB_PASSWORD (local y remote)
+       - Puerto: opcional (si vacío => por defecto según motor)
+       - Remote:
+           * Mongo => DB_URI obligatorio (remoteLink)
+           * SQL (postgres/mysql) => DB_HOST obligatorio (remoteLink)
+       - Local:
+           * DB_HOST = nombre del motor: postgres/mysql/mongo
+           * DB_URI = NO_CREAR (solo aplica mongo remote)
+           * DB_SSLMODE:
+               - postgres: local => disable, remote => require
+               - resto: NO_CREAR
+       - El paso se marca OK al pulsar "Generar variables" (NO PDF, NO TXT)
+    ========================================================= */
+
+    /* =========================
+       HELPERS
+    ========================= */
+
+    function getAppId() {
+        const meta = document.querySelector('meta[name="appId"]');
+        return meta ? (meta.getAttribute("content") || "") : "";
+    }
+
+    function toggleAyuda() {
+        const el = document.getElementById("ayuda");
+        if (!el) return;
+        el.style.display = (el.style.display === "none") ? "block" : "none";
+    }
+
+    function setEstadoUI(estado, mensaje) {
+        const badge = document.getElementById("estado");
+        const msg = document.getElementById("mensaje");
+
+        if (badge) {
+            badge.textContent = estado || "N/A";
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
+        if (msg) msg.textContent = mensaje || "";
+    }
+
+    function defaultPort(engine) {
+        if (engine === "postgres") return "5432";
+        if (engine === "mysql") return "3306";
+        if (engine === "mongo") return "27017";
+        return "";
+    }
+
+    function escapeHtml(str) {
+        return (str || "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    async function copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            ta.remove();
+        }
+    }
+
+    function crearFilaVariable(v) {
+        const tr = document.createElement("tr");
+
+        const tdKey = document.createElement("td");
+        tdKey.innerHTML = `<code>${escapeHtml(v.key)}</code>`;
+        tr.appendChild(tdKey);
+
+        const tdVal = document.createElement("td");
+
+        if (v.noCrear) {
+            tdVal.innerHTML = `<span class="text-muted font-monospace">NO_CREAR</span>`;
+        } else if (v.secret) {
+            tdVal.innerHTML = `<span class="font-monospace">••••••••••••••••</span>
+                         <span class="text-muted ms-2">(secret)</span>`;
+        } else {
+            tdVal.innerHTML = `<span class="font-monospace">${escapeHtml(v.value)}</span>`;
+        }
+        tr.appendChild(tdVal);
+
+        const tdAction = document.createElement("td");
+        tdAction.className = "text-end";
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-outline-secondary btn-sm";
+        btn.textContent = "Copiar";
+        btn.disabled = !!v.noCrear;
+
+        btn.onclick = async () => {
+            const toCopy =
+                (v.copyValue !== undefined && v.copyValue !== null) ? String(v.copyValue) :
+                    (v.noCrear ? "NO_CREAR" : String(v.value));
+
+            await copyToClipboard(toCopy);
+
+            btn.textContent = "Copiado ✓";
+            setTimeout(() => btn.textContent = "Copiar", 900);
+        };
+
+        tdAction.appendChild(btn);
+        tr.appendChild(tdAction);
+
+        return tr;
+    }
+
+    function valor(id) {
+        return (document.getElementById(id)?.value || "").trim();
+    }
+
+    function showStep2() {
+        const step2 = document.getElementById("step2");
+        if (step2) step2.style.display = "block";
+    }
+
+    function isPasoCompletoFromDom() {
+        const root = document.getElementById("tutorial_root");
+        const val = root ? (root.getAttribute("data-paso-completo") || "") : "";
+        return String(val).toLowerCase() === "true";
+    }
+
+    /* =========================
+       PASO 6 NAV (HTML NUEVO: btnPaso6_ok / btnPaso6_ko)
+    ========================= */
+    function desbloquearPaso6() {
+        const appId = getAppId();
+
+        const btnOk = document.getElementById("btnPaso6_ok");
+        const btnKo = document.getElementById("btnPaso6_ko");
+        const msg = document.getElementById("msgBloqueo");
+        const alert = document.getElementById("alertBloqueo");
+
+        if (btnKo) btnKo.classList.add("d-none");
+        if (btnOk) {
+            btnOk.classList.remove("d-none");
+            if (appId) btnOk.setAttribute("href", `/wizard/paso6?appId=${encodeURIComponent(appId)}`);
+        }
+
+        if (msg) msg.classList.add("d-none");
+        if (alert) alert.remove();
+
+        // opcional: actualizar el atributo del DOM por coherencia
+        const root = document.getElementById("tutorial_root");
+        if (root) root.setAttribute("data-paso-completo", "true");
+    }
+
+    /* =========================
+       VALIDACIONES
+    ========================= */
+
+    function marcarInvalido(id, invalido) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (invalido) el.classList.add("is-invalid");
+        else el.classList.remove("is-invalid");
+    }
+
+    function validarTodoObligatorio(mode, engine) {
+        // puerto opcional pero si viene debe ser número
+        const portRaw = valor("port");
+        if (portRaw !== "" && !/^\d+$/.test(portRaw)) return "El puerto debe ser numérico.";
+
+        // remoteLink obligatorio si remote
+        const remoteLink = valor("remoteLink");
+        if (mode === "remote" && !remoteLink) {
+            marcarInvalido("remoteLink", true);
+            return "En modo remote debes indicar la conexión (endpoint/URI).";
+        } else {
+            marcarInvalido("remoteLink", false);
+        }
+
+        // opcional: forzar formato mongo remote
+        if (mode === "remote" && engine === "mongo" && remoteLink) {
+            if (!(remoteLink.startsWith("mongodb://") || remoteLink.startsWith("mongodb+srv://"))) {
+                return "En Mongo remote, la conexión debe empezar por mongodb:// o mongodb+srv://";
+            }
+        }
+
+        // credenciales siempre obligatorias
+        const dbName = valor("dbName");
+        const dbUser = valor("dbUser");
+        const dbPass = valor("dbPassword");
+
+        marcarInvalido("dbName", !dbName);
+        marcarInvalido("dbUser", !dbUser);
+        marcarInvalido("dbPassword", !dbPass);
+
+        if (!dbName || !dbUser || !dbPass) {
+            return "DB_NAME, DB_USER y DB_PASSWORD son obligatorios.";
+        }
+
+        return null;
+    }
+
+    /* =========================
+       BACKEND: guardar paso 5
+       - Siempre enviamos todo cuando Generar Variables
+    ========================= */
+
+    async function confirmarPaso5() {
+        const appId = getAppId();
+        if (!appId) throw new Error("appId missing");
+
+        const mode = (document.getElementById("mode")?.value || "local").trim();
+        const engine = (document.getElementById("engine")?.value || "postgres").trim();
+
+        const portRaw = valor("port");
+        const dbName = valor("dbName");
+        const dbUser = valor("dbUser");
+        const dbPassword = valor("dbPassword");
+        const endpoint = valor("remoteLink");
+
+        const params = new URLSearchParams();
+        params.set("appId", appId);
+        params.set("mode", mode);
+        params.set("engine", engine);
+
+        if (portRaw !== "") params.set("port", portRaw);
+
+        // SIEMPRE obligatorios aquí (porque Generar Variables lo exige)
+        params.set("dbName", dbName);
+        params.set("dbUser", dbUser);
+        params.set("dbPassword", dbPassword);
+
+        // Solo remote manda endpoint
+        if (mode === "remote") params.set("endpoint", endpoint);
+
+        const res = await fetch("/api/wizard/paso5/confirmar", {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+            body: params.toString()
+        });
+
+        if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            throw new Error(`HTTP ${res.status} ${txt}`.trim());
+        }
+    }
+
+    /* =========================
+       Variables: construir Mongo URI sugerida
+    ========================= */
+
+    function construirMongoUriConCredenciales(uriBase, user, pass) {
+        let uri = (uriBase || "").trim();
+        if (!uri) return "";
+
+        // si ya tiene user:pass@ no tocamos
+        const afterProto = uri.split("://")[1] || "";
+        if (afterProto.includes("@") && afterProto.split("@")[0].includes(":")) return uri;
+
+        const idx = uri.indexOf("://");
+        if (idx === -1) return uri;
+
+        const proto = uri.slice(0, idx + 3);
+        const rest = uri.slice(idx + 3);
+
+        const u = encodeURIComponent(user || "");
+        const p = encodeURIComponent(pass || "");
+        if (!u || !p) return uri;
+
+        return proto + `${u}:${p}@` + rest;
+    }
+
+    /* =========================
+       Variables: construir lista final (tabla)
+    ========================= */
+
+    function buildVariables(mode, engine, port) {
+        const isRemote = (mode === "remote");
+        const p = (port || "").trim() || defaultPort(engine);
+
+        const remoteInput = valor("remoteLink");
+        const dbName = valor("dbName");
+        const dbUser = valor("dbUser");
+        const dbPass = valor("dbPassword");
+        const dbPassVisual = "••••••••••••••••";
+
+        const vars = [];
+
+        // comunes
+        vars.push({ key: "DB_MODE", value: mode });
+        vars.push({ key: "DB_ENGINE", value: engine });
+        vars.push({ key: "DB_NAME", value: dbName });
+        vars.push({ key: "DB_PORT", value: p });
+
+        // host / uri / sslmode
+        if (engine === "mongo") {
+            if (isRemote) {
+                const uriSugerida = construirMongoUriConCredenciales(remoteInput, dbUser, dbPass);
+
+                vars.push({ key: "DB_HOST", noCrear: true });
+                vars.push({ key: "DB_URI", value: uriSugerida || remoteInput });
+                vars.push({ key: "DB_SSLMODE", noCrear: true });
+            } else {
+                vars.push({ key: "DB_HOST", value: "mongo" });
+                vars.push({ key: "DB_URI", noCrear: true });
+                vars.push({ key: "DB_SSLMODE", noCrear: true });
+            }
+        }
+
+        if (engine === "postgres") {
+            vars.push({ key: "DB_URI", noCrear: true });
+            vars.push({ key: "DB_HOST", value: isRemote ? remoteInput : "postgres" });
+            vars.push({ key: "DB_SSLMODE", value: isRemote ? "require" : "disable" });
+        }
+
+        if (engine === "mysql") {
+            vars.push({ key: "DB_URI", noCrear: true });
+            vars.push({ key: "DB_HOST", value: isRemote ? remoteInput : "mysql" });
+            vars.push({ key: "DB_SSLMODE", noCrear: true });
+        }
+
+        // credenciales (siempre)
+        vars.push({ key: "DB_USER", value: dbUser, copyValue: dbUser, secret: true });
+        vars.push({ key: "DB_PASSWORD", value: dbPassVisual, copyValue: dbPass, secret: true });
+
+        return vars;
+    }
+
+    function pintarTablaVariables() {
+        const mode = (document.getElementById("mode")?.value || "local").trim();
+        const engine = (document.getElementById("engine")?.value || "postgres").trim();
+        const port = valor("port");
+
+        const vars = buildVariables(mode, engine, port);
+
+        const tbody = document.getElementById("varsBody");
+        if (tbody) {
+            tbody.innerHTML = "";
+            vars.forEach(v => tbody.appendChild(crearFilaVariable(v)));
+        }
+
+        const section = document.getElementById("varsSection");
+        if (section) section.style.display = "block";
+    }
+
+    /* =========================
+       ACCIONES
+    ========================= */
+
+    async function continuar() {
+        showStep2();
+        setEstadoUI("PENDIENTE", "Completa credenciales y pulsa “Generar variables”.");
+    }
+
+    async function generarVariables() {
+        const mode = (document.getElementById("mode")?.value || "local").trim();
+        const engine = (document.getElementById("engine")?.value || "postgres").trim();
+
+        const err = validarTodoObligatorio(mode, engine);
+        if (err) {
+            setEstadoUI("KO", err);
+            return;
+        }
+
+        try {
+            setEstadoUI("PENDIENTE", "Guardando configuración y preparando variables...");
+
+            // 1) guardar backend
+            await confirmarPaso5();
+
+            // 2) pintar tabla tipo Paso 4
+            pintarTablaVariables();
+
+            // 3) marcar OK y desbloquear
+            desbloquearPaso6();
+            setEstadoUI("OK", "Variables generadas. Paso 5 completado.");
+        } catch (e) {
+            setEstadoUI("KO", "No se pudo guardar/generar variables: " + (e?.message || "error"));
+        }
+    }
+
+    function descargarPdfOpcional() {
+        window.open("/manuales/paso_5.pdf", "_blank");
+    }
+
+    /* =========================
+       UI: remote_section + placeholder puerto
+    ========================= */
+
+    function onModeOrEngineChange() {
+        const mode = (document.getElementById("mode")?.value || "local").trim();
+        const engine = (document.getElementById("engine")?.value || "postgres").trim();
+
+        const remote = document.getElementById("remote_section");
+        if (remote) remote.style.display = (mode === "remote") ? "block" : "none";
+
+        const remoteLink = document.getElementById("remoteLink");
+        if (remoteLink) {
+            if (mode === "remote") remoteLink.classList.remove("is-invalid");
+        }
+
+        const portEl = document.getElementById("port");
+        if (portEl) portEl.placeholder = `Vacío = por defecto (${defaultPort(engine)})`;
+
+        // Si ya se están viendo variables, repintamos
+        const section = document.getElementById("varsSection");
+        const step2 = document.getElementById("step2");
+        if (step2 && step2.style.display !== "none" && section && section.style.display !== "none") {
+            pintarTablaVariables();
+        }
+    }
+
+    /* =========================
+       DOM READY
+    ========================= */
+
+    document.addEventListener("DOMContentLoaded", () => {
+        // listeners selects
+        document.getElementById("mode")?.addEventListener("change", onModeOrEngineChange);
+        document.getElementById("engine")?.addEventListener("change", onModeOrEngineChange);
+        onModeOrEngineChange();
+
+        // listeners botones
+        document.getElementById("btnContinuar")?.addEventListener("click", continuar);
+        document.getElementById("btnGenerarVariables")?.addEventListener("click", generarVariables);
+        document.getElementById("btn_pdf_repeat")?.addEventListener("click", descargarPdfOpcional);
+
+        // ===== Estado inicial (backend) =====
+        const completo = isPasoCompletoFromDom();
+
+        // Si ya estaba completo, mostramos step2 (para que pueda ver tabla/credenciales) y marcamos nav
+        if (completo) {
+            showStep2();
+            // opcional: si quieres mantener tu función (elimina alertas, etc.)
+            desbloquearPaso6();
+        }
+
+        // ===== Forzar estado visual de navegación Paso 6 (evita duplicados) =====
+        const btnOk = document.getElementById("btnPaso6_ok");
+        const btnKo = document.getElementById("btnPaso6_ko");
+        const msg = document.getElementById("msgBloqueo");
+
+        if (completo) {
+            btnOk?.classList.remove("d-none");
+            btnKo?.classList.add("d-none");
+            msg?.classList.add("d-none");
+        } else {
+            btnOk?.classList.add("d-none");
+            btnKo?.classList.remove("d-none");
+            msg?.classList.remove("d-none");
+        }
+
+        // ===== Badge inicial (por si viene OK/KO/PENDIENTE) =====
+        const badge = document.getElementById("estado");
+        if (badge) {
+            const estado = badge.textContent.trim();
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+        }
+    });
+
+    /* =========================
+       INTROJS
+    ========================= */
+
+    document.addEventListener("DOMContentLoaded", function () {
+        const btn = document.getElementById("inicio_tutorial");
+        if (!btn) return;
+
+        btn.addEventListener("click", function () {
+            const mode = (document.getElementById("mode")?.value || "local").trim();
+            const engine = (document.getElementById("engine")?.value || "postgres").trim();
+
+            const steps = [
+                {
+                    title: "PASO 5: BASE DE DATOS",
+                    intro: `
+            Bienvenido al <b>Paso 5</b>.<br><br>
+            Aquí configurarás la <b>base de datos</b>:
+            eliges <b>modo</b> y <b>motor</b>, completas credenciales
+            y pulsas <b>Generar variables</b> para marcar el paso como <b>OK</b>.
+        `
+                },
+                {
+                    element: "#btnGuiaPaso",
+                    title: "📘 Guía del paso (MUY IMPORTANTE)",
+                    intro: `
+            Antes de continuar, descarga y lee la guía.<br><br>
+            Explica la diferencia entre <b>local</b> y <b>remote</b>,
+            qué valores poner y cómo evitar errores de conexión.
+        `,
+                    position: "bottom"
+                },
+                { element: "#mode_container", intro: "1) Elige <b>local</b> o <b>remote</b>." },
+                { element: "#engine_container", intro: "2) Selecciona el motor de base de datos." },
+                { element: "#port_container", intro: "3) Puerto opcional (si lo dejas vacío, se usa el puerto por defecto)." },
+
+                ...(mode === "remote"
+                    ? [{
+                        element: "#remote_link_container",
+                        intro: engine === "mongo"
+                            ? "4) Remote + Mongo: pega la conexión completa (DB_URI). Es obligatoria."
+                            : "4) Remote + SQL: pega el endpoint/host (DB_HOST). Es obligatorio."
+                    }]
+                    : []),
+
+                { element: "#btnContinuar", intro: "5) Pulsa continuar para ver los campos de credenciales." },
+                { element: "#db_name_container", intro: "6) DB_NAME (obligatorio)." },
+                { element: "#db_user_container", intro: "7) DB_USER (obligatorio)." },
+                { element: "#db_pass_container", intro: "8) DB_PASSWORD (obligatorio, se guarda como <b>secret</b>)." },
+                { element: "#btnGenerarVariables", intro: "9) Genera las variables: se guardará la configuración y el paso quedará en <b>OK</b>." },
+
+                ...(document.querySelector("#btnPaso6_ok")
+                    ? [{ element: "#btnPaso6_ok", intro: "Cuando el paso esté en <b>OK</b>, se desbloquea el Paso 6." }]
+                    : [])
+            ];
+
+            const safeSteps = steps.filter(s => !s.element || document.querySelector(s.element));
+
+            introJs().setOptions({
+                steps: safeSteps,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Terminar"
+            }).start();
+        });
+    });
+</script>
+
+</body>
+</html>

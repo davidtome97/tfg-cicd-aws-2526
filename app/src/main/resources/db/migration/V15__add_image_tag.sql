@@ -1,0 +1,2 @@
+ALTER TABLE aplicacion
+    ADD COLUMN IF NOT EXISTS image_tag VARCHAR(50);

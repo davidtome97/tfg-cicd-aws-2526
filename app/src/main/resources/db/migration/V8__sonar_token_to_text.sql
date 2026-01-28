@@ -1,0 +1,1 @@
+ALTER TABLE aplicacion ADD COLUMN IF NOT EXISTS sonar_token TEXT;
