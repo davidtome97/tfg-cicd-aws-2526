@@ -6,6 +6,8 @@ import com.sistemagestionapp.model.ProveedorCiCd;
 import com.sistemagestionapp.model.TipoBaseDatos;
 import com.sistemagestionapp.model.TipoProyecto;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -15,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.text.Normalizer;
@@ -67,13 +68,7 @@ public class ZipGeneratorService {
         Lenguaje lenguaje = (app.getLenguaje() != null) ? app.getLenguaje() : Lenguaje.JAVA;
         TipoProyecto tipoProyecto = (app.getTipoProyecto() != null) ? app.getTipoProyecto() : TipoProyecto.CONFIG;
 
-        Path baseDir = Paths.get("").toAbsolutePath();
         String demoFolderName = (lenguaje == Lenguaje.PYTHON) ? "demo-python" : "demo-java";
-
-        Path origenDemo = (baseDir.getParent() != null) ? baseDir.getParent().resolve(demoFolderName) : null;
-        if (origenDemo == null || !Files.isDirectory(origenDemo)) {
-            origenDemo = baseDir.resolve(demoFolderName);
-        }
 
         Path tempDir = Files.createTempDirectory("tfg-zip-");
 
@@ -88,12 +83,7 @@ public class ZipGeneratorService {
 
         try {
             if (tipoProyecto == TipoProyecto.DEMO) {
-                if (!Files.isDirectory(origenDemo)) {
-                    throw new IllegalStateException(
-                            "No se ha encontrado la carpeta " + demoFolderName + " en: " + origenDemo.toAbsolutePath()
-                    );
-                }
-                copiarCarpeta(origenDemo, carpetaProyecto);
+                copiarDemoDesdeClasspath(demoFolderName, carpetaProyecto);
             } else {
                 crearEstructuraMinimaConfig(carpetaProyecto, lenguaje);
             }
@@ -359,7 +349,7 @@ public class ZipGeneratorService {
      */
     private void comprimirCarpetaEnZip(Path carpeta, Path zipDestino) throws IOException {
         try (OutputStream fos = Files.newOutputStream(zipDestino);
-             ZipOutputStream zos = new ZipOutputStream(fos)) {
+             ZipOutputStream zos = new ZipOutputStream(fos, StandardCharsets.UTF_8)) {
 
             Files.walk(carpeta).forEach(path -> {
                 try {
@@ -491,5 +481,41 @@ public class ZipGeneratorService {
         base = Normalizer.normalize(base, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
         base = base.replaceAll("[^a-z0-9_-]+", "-").replaceAll("^-+", "").replaceAll("-+$", "");
         return base.isBlank() ? defaultValue : base;
+    }
+
+    private void copiarDemoDesdeClasspath(String demoFolderName, Path destino) throws IOException {
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        String pattern = "classpath*:demos/" + demoFolderName + "/**";
+        Resource[] resources = resolver.getResources(pattern);
+
+        boolean copiedAny = false;
+
+        for (Resource r : resources) {
+            if (!r.exists() || !r.isReadable()) continue;
+            String uri = r.getURI().toString();
+            String marker = "/demos/" + demoFolderName + "/";
+            int idx = uri.indexOf(marker);
+            if (idx < 0) continue;
+
+            String rel = uri.substring(idx + marker.length());
+            if (rel.isBlank() || rel.endsWith("/")) continue;
+
+            if (rel.startsWith("target/")) continue;
+            if (rel.contains("/target/")) continue;
+            if (rel.equals("__pycache__") || rel.startsWith("__pycache__/") || rel.contains("/__pycache__/")) continue;
+
+            Path out = destino.resolve(rel);
+            if (out.getParent() != null) Files.createDirectories(out.getParent());
+
+            try (InputStream is = r.getInputStream()) {
+                Files.copy(is, out, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            copiedAny = true;
+        }
+
+        if (!copiedAny) {
+            throw new IllegalStateException("No se ha encontrado la carpeta " + demoFolderName + " en resources/demos");
+        }
     }
 }
