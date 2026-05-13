@@ -4,6 +4,23 @@ Proyecto desarrollado como **Trabajo Fin de Grado (TFG)** orientado al **diseño
 
 ---
 
+## 🎥 Vídeo demostración
+
+📹 Explicación breve del proyecto y funcionamiento de la aplicación:
+
+[▶ Ver vídeo demostración](docs/video/video_explicacion.mp4)
+
+---
+
+## 📄 Documentación y certificaciones
+
+- [📄 Currículum](docs/cv/CV_David_Tome.pdf)
+- [☁️ AWS Certified Cloud Practitioner](docs/cv/aws-cloud-practitioner.pdf)
+- [🏗 AWS Certified Solutions Architect Associate](docs/cv/aws-solutions-architect.pdf)
+- [📚 Memoria completa del TFG](docs/memoria/Memoria_TFG.pdf)
+
+---
+
 ## 🚀 Descripción del proyecto
 
 Esta aplicación web implementa un **asistente de despliegues** que permite **crear y configurar aplicaciones** y generar los recursos necesarios para su **despliegue automatizado en la nube**.
