@@ -1,6 +1,15 @@
 # Sistema de Gestión y Asistente de Despliegues CI/CD en AWS
 
-Proyecto desarrollado como **Trabajo Fin de Grado (TFG)** orientado al **diseño, despliegue y automatización de aplicaciones en entornos Cloud**, aplicando buenas prácticas de **DevOps** y simulando un **entorno profesional real de producción**.
+En un entorno empresarial donde la velocidad, la calidad y la capacidad de adaptación marcan la diferencia, la adopción de prácticas DevOps se ha convertido en un factor clave para competir con éxito. La integración entre desarrollo y operaciones, junto con la automatización de procesos, permite a las organizaciones acelerar la entrega de software, mejorar su fiabilidad y responder de forma ágil a las demandas del mercado.  
+<img width="878" height="497" alt="Captura de pantalla 2026-05-14 a las 12 52 16" src="https://github.com/user-attachments/assets/b55d5b86-ca82-4490-88be-8d354704fbf5" />
+
+Este proyecto nace con el objetivo de trasladar estos principios a un entorno práctico y aplicable, ofreciendo una solución integral para la gestión y automatización de despliegues en la nube. Se trata de un sistema que simula escenarios reales de producción, facilitando la creación y configuración de aplicaciones y generando automáticamente los recursos necesarios para su despliegue mediante pipelines CI/CD.
+
+A través de un asistente guiado, la plataforma permite a las empresas definir parámetros clave, como proveedores de integración continua, motores de bases de datos o variables de entorno,  adaptando los despliegues a diferentes necesidades sin modificar el código base. Esto reduce la complejidad operativa y mejora la consistencia en los entornos de desarrollo y producción. 
+El valor diferencial de esta solución reside en la integración de tecnologías clave del ecosistema DevOps, como contenedores, automatización CI/CD y despliegue en entornos cloud (AWS), junto con herramientas de control de calidad y gestión de configuración. Todo ello en un único sistema orientado tanto a fines educativos como a su posible adopción en contextos empresariales reales. 
+
+Además, durante el desarrollo de este Trabajo de Fin de Grado se ha reforzado la especialización en tecnologías cloud mediante la obtención de certificaciones oficiales de AWS, concretamente AWS Certified Cloud Practitioner y AWS Certified Solutions Architect – Associate, lo que garantiza un enfoque alineado con estándares profesionales y buenas prácticas del sector.
+En definitiva, este proyecto representa un ejemplo práctico de cómo las organizaciones pueden evolucionar hacia modelos más eficientes, automatizados y escalables, alineando la tecnología con los objetivos estratégicos del negocio.
 
 ---
 
