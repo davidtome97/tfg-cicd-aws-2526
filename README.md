@@ -140,9 +140,9 @@ Esta opción permite reutilizar el asistente sin necesidad de utilizar una aplic
 
 ## 🔄 CI/CD y automatización
 
-El sistema permite trabajar con distintos **proveedores de integración y despliegue continuo**, seleccionables durante el proceso de configuración.
-
+El sistema se integra a nivel de API Rest con distintos proveedores de integración y despliegue continuo, seleccionables durante el proceso de configuración.
 Proveedores disponibles:
+
 - GitHub Actions
 - GitLab CI
 - Jenkins
