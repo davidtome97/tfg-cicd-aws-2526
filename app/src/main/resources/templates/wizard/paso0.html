@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Paso 0 – Primer commit</title>
+
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+
+    <!-- ✅ IntroJS (tutorial guiado) -->
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/intro.js/minified/introjs.min.css">
+
+    <meta name="appId" th:content="${appId}">
+</head>
+
+<body class="bg-light">
+
+<div class="container mt-3">
+    <div class="d-flex justify-content-end mb-3">
+        <form th:action="@{/logout}" method="post">
+            <button type="submit" class="btn btn-outline-danger">
+                Cerrar sesión
+            </button>
+        </form>
+    </div>
+</div>
+
+<nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+        <a class="navbar-brand" th:href="@{/aplicaciones}">
+            Sistema CI/CD – Paso 0
+        </a>
+    </div>
+</nav>
+
+<div class="container" id="tutorial_root" style="margin-bottom: 70px;">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Paso 0 – Inicializar repositorio (primer commit)</h2>
+
+        <div class="d-flex gap-2">
+            <a id="btnGuiaGit"
+               href="/manuales/paso_0.pdf"
+               target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                📘 Manual Git
+            </a>
+
+            <a id="btnGuiaJenkins"
+               href="/manuales/paso_0_jenkins.pdf"
+               target="_blank"
+               class="btn btn-outline-secondary btn-sm">
+                📘 Manual Jenkins
+            </a>
+
+            <button id="inicio_tutorial"
+                    type="button"
+                    class="btn btn-outline-secondary btn-sm">
+                Iniciar tutorial
+            </button>
+        </div>
+    </div>
+
+    <!-- ✅ Mensaje fijo (refuerza el tutorial) -->
+    <p class="text-muted mt-2" id="texto_obligatorio">
+        📌 <b>Obligatorio:</b> antes de continuar, lee el manual correspondiente a tu CI/CD
+        (GitHub/GitLab → Manual Git · Jenkins → Manual Jenkins).
+    </p>
+
+    <p class="text-muted" id="intro_texto">
+        Antes de empezar el asistente, debes crear el repositorio remoto y hacer el primer commit.
+        Este paso asegura que existe historial en Git y que el pipeline podrá trabajar sobre una rama principal.
+    </p>
+
+    <div class="alert alert-info shadow-sm" id="info_jenkins">
+        <h6 class="mb-2">Opcional: hacerlo desde Jenkins</h6>
+        <ol class="mb-0">
+            <li>Crea un repositorio en GitHub o GitLab y sube el proyecto.</li>
+            <li>Crea un Multibranch Pipeline en Jenkins.</li>
+            <li>Configura credenciales y variables.</li>
+            <li>Ejecuta el pipeline y verifica el despliegue.</li>
+        </ol>
+    </div>
+
+    <div class="card p-4 shadow-sm" id="card_paso0">
+
+        <div class="mb-3">
+            <h5>Comandos sugeridos</h5>
+            <div class="alert alert-secondary" id="comandos_container">
+<pre class="mb-0">
+git init
+git add .
+git commit -m "initial commit"
+git branch -M main
+git remote add origin &lt;URL_DEL_REPO&gt;
+git push -u origin main
+</pre>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- FORM PASO 0 -->
+        <form th:action="@{/wizard/paso0/confirmar}" method="post" id="form_paso0">
+            <input type="hidden" name="appId" th:value="${appId}"/>
+
+            <div class="mb-3" id="hash_container">
+                <label for="commitHash" class="form-label">Hash del commit (opcional)</label>
+                <input id="commitHash" name="commitHash" class="form-control"
+                       placeholder="Ej: 37e8959a3de9f24dd9751e9f135c8feeb6c036d7">
+                <div class="form-text">
+                    Puedes validar el hash si quieres comprobar que existe. Si no lo tienes, puedes marcar el paso igualmente.
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center" id="acciones_container">
+                <button id="btnValidar" type="button" class="btn btn-outline-primary">
+                    Comprobar hash
+                </button>
+
+                <button id="btnOk" type="submit" class="btn btn-success">
+                    Marcar como OK
+                </button>
+
+                <span id="spinner"
+                      class="spinner-border spinner-border-sm text-primary d-none"></span>
+            </div>
+        </form>
+
+        <hr>
+
+        <!-- ESTADO -->
+        <p class="fs-5">
+            Estado:
+            <span id="estado"
+                  class="badge bg-secondary"
+                  th:text="${controlPaso != null ? controlPaso.estado : 'PENDIENTE'}">
+                PENDIENTE
+            </span>
+        </p>
+
+        <p id="mensaje" class="text-muted"
+           th:text="${controlPaso != null ? controlPaso.mensaje : ''}">
+        </p>
+    </div>
+
+    <!-- ⚠️ MENSAJE BLOQUEO -->
+    <div id="alertBloqueo"
+         th:if="${!pasoActualCompleto}"
+         class="alert alert-warning mt-3">
+        Debes completar este paso antes de continuar al siguiente.
+    </div>
+
+    <!-- NAVEGACIÓN (mismo diseño, fijos a los extremos) -->
+    <div class="mt-4 d-flex justify-content-between align-items-start flex-nowrap gap-3">
+
+        <!-- Izquierda -->
+        <a th:href="@{/aplicaciones}"
+           class="btn btn-outline-secondary">
+            ← Volver al listado
+        </a>
+
+        <!-- Derecha -->
+        <div class="text-end">
+            <button id="btnPaso1"
+                    class="btn btn-outline-secondary"
+                    th:disabled="${!pasoActualCompleto}"
+                    th:onclick="${pasoActualCompleto}
+                        ? 'location.href=\'/wizard/paso1?appId=' + ${appId} + '\''
+                        : null">
+                Ir al paso 1 →
+            </button>
+
+            <div id="msgBloqueo"
+                 th:if="${!pasoActualCompleto}"
+                 class="form-text text-danger mt-1">
+                Completa este paso para poder continuar.
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/intro.js/minified/intro.min.js"></script>
+
+<script>
+    /* =========================
+       Badge estado inicial
+    ========================= */
+    (function () {
+        const badge = document.getElementById("estado");
+        if (!badge) return;
+        const estado = badge.textContent.trim();
+        badge.className =
+            estado === "OK" ? "badge bg-success" :
+                estado === "KO" ? "badge bg-danger" :
+                    "badge bg-secondary";
+    })();
+
+    /* =========================
+       Validación hash (opcional)
+    ========================= */
+    (function () {
+        const btn = document.getElementById("btnValidar");
+        const spinner = document.getElementById("spinner");
+        const badge = document.getElementById("estado");
+        const msg = document.getElementById("mensaje");
+        const hashInput = document.getElementById("commitHash");
+
+        const setEstado = (estado, mensaje) => {
+            badge.textContent = estado;
+            badge.className =
+                estado === "OK" ? "badge bg-success" :
+                    estado === "KO" ? "badge bg-danger" :
+                        "badge bg-secondary";
+            msg.textContent = mensaje || "";
+        };
+
+        btn.addEventListener("click", async () => {
+            const hash = hashInput.value.trim();
+            if (!hash) {
+                setEstado("KO", "Introduce un hash para validar.");
+                hashInput.classList.add("is-invalid");
+                return;
+            }
+            hashInput.classList.remove("is-invalid");
+
+            btn.disabled = true;
+            spinner.classList.remove("d-none");
+
+            try {
+                const res = await fetch("/wizard/paso0/validar", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                    body: new URLSearchParams({ commitHash: hash })
+                });
+
+                if (!res.ok) throw new Error("HTTP " + res.status);
+
+                const data = await res.json();
+                setEstado(data.estado, data.mensaje);
+
+            } catch {
+                setEstado("KO", "Error validando el hash.");
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add("d-none");
+            }
+        });
+    })();
+
+    /* =========================
+       IntroJS - Paso 0
+       (primer foco: guías)
+    ========================= */
+    document.addEventListener("DOMContentLoaded", function () {
+        const btn = document.getElementById("inicio_tutorial");
+        if (!btn) return;
+
+        btn.addEventListener("click", function () {
+            const steps = [
+                {
+                    title: "📘 Paso 0 – MUY IMPORTANTE",
+                    intro: `
+                        Este es el paso más importante del asistente.<br><br>
+                        <b>Antes de continuar</b>, lee el manual que corresponda a tu CI/CD.
+                    `
+                },
+                {
+                    element: "#btnGuiaGit",
+                    title: "📘 Manual Git (obligatorio si usas GitHub/GitLab)",
+                    intro: `
+                        Lee este manual si vas a usar:<br>
+                        <ul class="mb-0">
+                            <li>GitHub Actions</li>
+                            <li>GitLab CI</li>
+                        </ul>
+                    `,
+                    position: "bottom"
+                },
+                {
+                    element: "#btnGuiaJenkins",
+                    title: "📘 Manual Jenkins (obligatorio si usas Jenkins)",
+                    intro: `
+                        Lee este manual si vas a usar <b>Jenkins</b>.<br><br>
+                        Incluye configuración del pipeline, credenciales y ejecución.
+                    `,
+                    position: "bottom"
+                },
+                {
+                    element: "#comandos_container",
+                    title: "Comandos sugeridos",
+                    intro: "Aquí tienes una secuencia típica para inicializar el repo y hacer el primer push a <code>main</code>.",
+                    position: "top"
+                },
+                {
+                    element: "#hash_container",
+                    title: "Hash del commit (opcional)",
+                    intro: "Si quieres, pega el hash del commit inicial para validarlo. Si no lo tienes, puedes saltártelo.",
+                    position: "top"
+                },
+                {
+                    element: "#acciones_container",
+                    title: "Validar / Marcar OK",
+                    intro: "Puedes validar el hash y después marcar el paso como OK para desbloquear el paso 1.",
+                    position: "top"
+                },
+                {
+                    element: "#btnPaso1",
+                    title: "Continuar al paso 1",
+                    intro: "Cuando completes este paso (OK), podrás ir al paso 1.",
+                    position: "left"
+                }
+            ];
+
+            const safeSteps = steps.filter(s => !s.element || document.querySelector(s.element));
+
+            introJs().setOptions({
+                steps: safeSteps,
+                showProgress: true,
+                showBullets: false,
+                nextLabel: "Siguiente",
+                prevLabel: "Anterior",
+                doneLabel: "Entendido"
+            }).start();
+        });
+    });
+</script>
+
+</body>
+</html>

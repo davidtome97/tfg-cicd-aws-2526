@@ -1,0 +1,54 @@
+services:
+  mongo:
+    image: mongo:8
+    container_name: demojava-mongo
+    profiles: ["local"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${DB_USER:-demo}
+      MONGO_INITDB_ROOT_PASSWORD: ${DB_PASSWORD:-demo}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-demo}
+    networks: [demo-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  demo-java-local:
+    image: ${IMAGE_URI:-demo-java-local}
+    profiles: ["local"]
+    environment:
+      SPRING_PROFILES_ACTIVE: mongo
+      DB_ENGINE: mongo
+      DB_HOST: ${DB_HOST:-mongo}
+      DB_PORT: ${DB_PORT:-27017}
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    networks: [demo-net]
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  demo-java-remote:
+    image: "${IMAGE_URI?ERROR define IMAGE_URI for remote}"
+    profiles: ["remote"]
+    environment:
+      JAVA_TOOL_OPTIONS: "-Djdk.tls.client.protocols=TLSv1.2"
+      SPRING_PROFILES_ACTIVE: mongo
+      DB_ENGINE: mongo
+      DB_URI: "${DB_URI?ERROR define DB_URI for remote}"
+      DB_NAME: ${DB_NAME:-demo}
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    networks: [demo-net]
+    restart: unless-stopped
+
+networks:
+  demo-net:
+    driver: bridge

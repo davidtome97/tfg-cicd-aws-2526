@@ -1,0 +1,567 @@
+// Jenkinsfile (Plantilla Java + 3 motores: mysql/postgres/mongo + local/remote)
+//
+// - Yo compilo y testeo con Maven o mvnw
+// - Yo ejecuto Sonar si tengo credenciales (si no, lo salto)
+// - Yo construyo y pusheo a ECR solo en main o cuando es tag
+// - Yo despliego en EC2 tanto en main como en tag (main => :latest, tag => :vX.Y.Z)
+// - Yo uso docker compose profiles: local|remote
+// - Yo soporto DB_ENGINE: mysql|postgres|mongo
+// - Yo soporto BD remota: RDS (SQL) o Mongo Atlas (DB_URI)
+//
+// ✅ FIXES incluidos:
+// - Yo hago checkout limpio (evito "fatal: not in a git directory").
+// - Yo calculo APP_NAME sin depender de ECR_REPOSITORY (porque puede no existir aún en Compute).
+// - Yo paso IS_MAIN/IS_TAG al remoto para decidir :latest vs :tag.
+// - Yo evito el conflicto de container_name fijo (lo elimino si existe en el compose).
+// - Yo archivo JAR solo si existe (y no reviento si es otro tipo de build).
+
+pipeline {
+  agent any
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    // Yo desactivo el checkout por defecto porque quiero controlar el workspace
+    skipDefaultCheckout(true)
+  }
+
+  // ✅ Yo NO fijo APP_NAME real aquí. Lo dejo “app” y lo recalculo bien en Compute.
+  environment {
+    APP_NAME = "app"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        // Yo limpio el workspace para evitar problemas tipo “fatal: not in a git directory”
+        deleteDir()
+        // Yo clono lo que toque (branch/tag) del multibranch pipeline
+        checkout scm
+        sh 'git --version'
+      }
+    }
+
+    stage('Build & Test') {
+      steps {
+        sh '''
+          set -euo pipefail
+          if [ -x "./mvnw" ]; then
+            ./mvnw -B test
+            ./mvnw -B package
+          else
+            mvn -B test
+            mvn -B package
+          fi
+        '''
+      }
+    }
+
+    // =========================
+    // SONAR: NO TOCAR
+    // =========================
+    stage('Sonar (optional)') {
+      steps {
+        script {
+          // Yo detecto si tengo credenciales de Sonar; si no, lo salto
+          def sonarOk = true
+          try {
+            withCredentials([
+              string(credentialsId: 'SONAR_TOKEN',        variable: 'SONAR_TOKEN'),
+              string(credentialsId: 'SONAR_PROJECT_KEY',  variable: 'SONAR_PROJECT_KEY'),
+              string(credentialsId: 'SONAR_ORGANIZATION', variable: 'SONAR_ORGANIZATION')
+            ]) { }
+          } catch (e) {
+            sonarOk = false
+          }
+
+          if (!sonarOk) {
+            echo "No tengo credenciales de Sonar configuradas, así que salto Sonar."
+            return
+          }
+        }
+
+        // Yo marco Sonar como UNSTABLE si falla, pero continúo el pipeline
+        catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {
+          withCredentials([
+            string(credentialsId: 'SONAR_TOKEN',        variable: 'SONAR_TOKEN'),
+            string(credentialsId: 'SONAR_HOST_URL',     variable: 'SONAR_HOST_URL'),
+            string(credentialsId: 'SONAR_PROJECT_KEY',  variable: 'SONAR_PROJECT_KEY'),
+            string(credentialsId: 'SONAR_ORGANIZATION', variable: 'SONAR_ORGANIZATION')
+          ]) {
+            sh '''
+              set -euo pipefail
+              SONAR_HOST_URL="${SONAR_HOST_URL:-https://sonarcloud.io}"
+
+              if ! command -v curl >/dev/null 2>&1; then
+                apt-get update -y && apt-get install -y curl
+              fi
+              if ! command -v unzip >/dev/null 2>&1; then
+                apt-get update -y && apt-get install -y unzip
+              fi
+
+              curl -fsSL -o sonar-scanner.zip \
+                https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+
+              rm -rf sonar-scanner-* || true
+              unzip -q sonar-scanner.zip
+              rm -f sonar-scanner.zip
+
+              ./sonar-scanner-*/bin/sonar-scanner \
+                -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+                -Dsonar.organization="${SONAR_ORGANIZATION}" \
+                -Dsonar.host.url="${SONAR_HOST_URL}" \
+                -Dsonar.token="${SONAR_TOKEN}" \
+                -Dsonar.sources="." \
+                -Dsonar.java.binaries="target"
+            '''
+          }
+        }
+      }
+      post {
+        unsuccessful {
+          echo "Sonar ha fallado (UNSTABLE), pero yo continúo el pipeline."
+        }
+      }
+    }
+
+    stage('Compute IMAGE_TAG + APP_NAME') {
+      steps {
+        script {
+          // Yo calculo si estoy en main o en tag
+          def branchRaw = (env.GIT_BRANCH ?: env.BRANCH_NAME ?: "").trim()
+          def branch = branchRaw.replaceFirst(/^origin\\//, "")
+
+          def tagName = ""
+          try {
+            tagName = sh(
+              script: "git describe --tags --exact-match 2>/dev/null || true",
+              returnStdout: true
+            ).trim()
+          } catch (ignored) {
+            tagName = ""
+          }
+
+          // Yo apoyo también el TAG_NAME de Jenkins si existe
+          if (!tagName && env.TAG_NAME?.trim()) {
+            tagName = env.TAG_NAME.trim()
+          }
+
+          def sha = sh(script: "git rev-parse --short=12 HEAD", returnStdout: true).trim()
+
+          // Yo decido el IMAGE_TAG: si es tag uso el tag, si no uso el sha
+          env.IMAGE_TAG = (tagName ? tagName : sha)
+          env.IS_TAG  = (tagName ? "true" : "false")
+          env.IS_MAIN = (branch == "main" ? "true" : "false")
+
+          // ✅ Yo calculo APP_NAME sin depender de ECR_REPOSITORY (porque aún puede no estar cargado aquí).
+          // Yo uso el nombre del job (multibranch) como base, y lo hago "safe" para docker compose.
+          def rawName = (env.JOB_BASE_NAME ?: env.JOB_NAME ?: "app").trim()
+
+          def safe = rawName
+            .toLowerCase()
+            .replaceAll(/[^a-z0-9_-]+/, "-")
+            .replaceAll(/^-+/, "")
+            .replaceAll(/-+$/, "")
+
+          if (!safe) safe = "app"
+          env.APP_NAME = safe
+
+          echo "BranchRaw: ${branchRaw}"
+          echo "Branch: ${branch}"
+          echo "Tag detectado: ${tagName}"
+          echo "IS_MAIN: ${env.IS_MAIN}"
+          echo "IS_TAG: ${env.IS_TAG}"
+          echo "IMAGE_TAG: ${env.IMAGE_TAG}"
+          echo "APP_NAME (safe): ${env.APP_NAME}"
+        }
+      }
+    }
+
+    // ============================================================
+    // ✅ BUILD & PUSH ECR (main/tags only)
+    // ============================================================
+    stage('Build & Push ECR (main/tags only)') {
+      when { expression { return env.IS_MAIN == "true" || env.IS_TAG == "true" } }
+      steps {
+        script {
+          // Yo verifico si tengo credenciales AWS/ECR; si no, salto el push
+          def awsOk = true
+          try {
+            withCredentials([
+              string(credentialsId: 'AWS_ACCESS_KEY_ID',     variable: 'AWS_ACCESS_KEY_ID'),
+              string(credentialsId: 'AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+              string(credentialsId: 'AWS_REGION',            variable: 'AWS_REGION'),
+              string(credentialsId: 'AWS_ACCOUNT_ID',        variable: 'AWS_ACCOUNT_ID'),
+              string(credentialsId: 'ECR_REPOSITORY',        variable: 'ECR_REPOSITORY')
+            ]) { }
+          } catch (e) {
+            awsOk = false
+          }
+          if (!awsOk) {
+            echo "No tengo credenciales AWS/ECR configuradas, así que salto el push a ECR."
+            return
+          }
+        }
+
+        withCredentials([
+          string(credentialsId: 'AWS_ACCESS_KEY_ID',     variable: 'AWS_ACCESS_KEY_ID'),
+          string(credentialsId: 'AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+          string(credentialsId: 'AWS_REGION',            variable: 'AWS_REGION'),
+          string(credentialsId: 'AWS_ACCOUNT_ID',        variable: 'AWS_ACCOUNT_ID'),
+          string(credentialsId: 'ECR_REPOSITORY',        variable: 'ECR_REPOSITORY')
+        ]) {
+          sh '''
+            set -euo pipefail
+
+            docker --version >/dev/null
+
+            ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+            IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+            echo "Login en ECR (aws-cli dentro de Docker)..."
+            docker run --rm \
+              -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+              -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+              -e AWS_REGION="${AWS_REGION}" \
+              amazon/aws-cli:latest \
+              ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+
+            echo "Construyo la imagen: ${IMAGE_URI}"
+            DOCKER_BUILDKIT=1 docker build --provenance=false -t "${IMAGE_URI}" .
+
+            echo "Pusheo la imagen..."
+            docker push "${IMAGE_URI}"
+
+            if [ "${IS_MAIN}" = "true" ]; then
+              echo "Estoy en main, así que también etiqueto/pusheo :latest"
+              docker tag "${IMAGE_URI}" "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+              docker push "${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+            fi
+
+            echo "Listo ✅"
+          '''
+        }
+      }
+    }
+
+    // ============================================================
+    // ✅ DEPLOY EC2 (main OR tags)
+    // ============================================================
+    stage('Deploy EC2 (main/tags)') {
+      when { expression { return env.IS_TAG == "true" || env.IS_MAIN == "true" } }
+      steps {
+
+        script {
+          // Yo compruebo credenciales obligatorias de deploy
+          def requiredOk = true
+          try {
+            withCredentials([
+              string(credentialsId: 'EC2_HOST',              variable: 'EC2_HOST'),
+              string(credentialsId: 'AWS_ACCESS_KEY_ID',     variable: 'AWS_ACCESS_KEY_ID'),
+              string(credentialsId: 'AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+              string(credentialsId: 'AWS_REGION',            variable: 'AWS_REGION'),
+              string(credentialsId: 'AWS_ACCOUNT_ID',        variable: 'AWS_ACCOUNT_ID'),
+              string(credentialsId: 'ECR_REPOSITORY',        variable: 'ECR_REPOSITORY')
+            ]) { }
+          } catch (e) {
+            requiredOk = false
+          }
+
+          if (!requiredOk) {
+            echo "Me faltan credenciales obligatorias (EC2/AWS/ECR). Salto el deploy."
+            return
+          }
+
+          // Yo leo credenciales opcionales (si existen) sin reventar el pipeline
+          def readOptional = { String credId ->
+            def out = ""
+            try {
+              withCredentials([string(credentialsId: credId, variable: 'OPT')]) {
+                out = sh(script: 'printf "%s" "$OPT"', returnStdout: true).trim()
+              }
+            } catch (ignored) {
+              out = ""
+            }
+            return out
+          }
+
+          env.EC2_KNOWN_HOSTS_OPT = readOptional('EC2_KNOWN_HOSTS')
+
+          env.DB_MODE_OPT     = readOptional('DB_MODE')       // local|remote
+          env.DB_ENGINE_OPT   = readOptional('DB_ENGINE')     // mysql|postgres|mongo
+          env.DB_PORT_OPT     = readOptional('DB_PORT')
+          env.DB_NAME_OPT     = readOptional('DB_NAME')
+          env.DB_SSLMODE_OPT  = readOptional('DB_SSLMODE')
+          env.APP_PORT_OPT    = readOptional('APP_PORT')
+
+          env.DB_URI_OPT      = readOptional('DB_URI')
+          env.DB_HOST_OPT     = readOptional('DB_HOST')
+          env.DB_USER_OPT     = readOptional('DB_USER')
+          env.DB_PASSWORD_OPT = readOptional('DB_PASSWORD')
+
+          echo "Opcionales cargados (vacío = no configurado)."
+        }
+
+        withCredentials([sshUserPrivateKey(
+          credentialsId: 'EC2_LLAVE_SSH',
+          keyFileVariable: 'KEYFILE',
+          usernameVariable: 'SSHUSER'
+        )]) {
+          withCredentials([
+            string(credentialsId: 'AWS_ACCESS_KEY_ID',     variable: 'AWS_ACCESS_KEY_ID'),
+            string(credentialsId: 'AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_ACCESS_KEY'),
+            string(credentialsId: 'AWS_REGION',            variable: 'AWS_REGION'),
+            string(credentialsId: 'AWS_ACCOUNT_ID',        variable: 'AWS_ACCOUNT_ID'),
+            string(credentialsId: 'ECR_REPOSITORY',        variable: 'ECR_REPOSITORY'),
+            string(credentialsId: 'EC2_HOST',              variable: 'EC2_HOST')
+          ]) {
+            sh '''
+              set -euo pipefail
+
+              echo "======== DEBUG SSH DESTINO ========"
+              echo "EC2_HOST=${EC2_HOST}"
+              echo "SSHUSER=${SSHUSER}"
+              echo "APP_NAME=${APP_NAME}"
+              echo "IMAGE_TAG=${IMAGE_TAG}"
+              echo "IS_MAIN=${IS_MAIN} IS_TAG=${IS_TAG}"
+              echo "==================================="
+
+              echo "[NET] probando conectividad TCP a ${EC2_HOST}:22 ..."
+              timeout 5 bash -lc "cat < /dev/null > /dev/tcp/${EC2_HOST}/22" \
+                && echo "[NET] OK: puerto 22 accesible" \
+                || (echo "[NET] FAIL: NO hay acceso a 22 (ruta/SG/NACL/VPC)"; exit 22)
+
+              EC2_KNOWN_HOSTS="${EC2_KNOWN_HOSTS_OPT:-}"
+
+              DB_MODE="${DB_MODE_OPT:-}"
+              DB_ENGINE="${DB_ENGINE_OPT:-}"
+              DB_PORT="${DB_PORT_OPT:-}"
+              DB_NAME="${DB_NAME_OPT:-}"
+              DB_SSLMODE="${DB_SSLMODE_OPT:-}"
+              APP_PORT="${APP_PORT_OPT:-}"
+
+              DB_URI="${DB_URI_OPT:-}"
+              DB_HOST="${DB_HOST_OPT:-}"
+              DB_USER="${DB_USER_OPT:-}"
+              DB_PASSWORD="${DB_PASSWORD_OPT:-}"
+
+              SSH_OPTS="-i ${KEYFILE} \
+                -o BatchMode=yes \
+                -o PasswordAuthentication=no \
+                -o KbdInteractiveAuthentication=no \
+                -o PreferredAuthentications=publickey \
+                -o IdentitiesOnly=yes \
+                -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile=/root/.ssh/known_hosts \
+                -o ConnectTimeout=10 \
+                -o ConnectionAttempts=2 \
+                -o ServerAliveInterval=5 \
+                -o ServerAliveCountMax=2"
+
+              mkdir -p /root/.ssh
+              chmod 700 /root/.ssh
+              touch /root/.ssh/known_hosts
+              chmod 600 /root/.ssh/known_hosts
+
+              ssh-keygen -R "${EC2_HOST}" -f /root/.ssh/known_hosts >/dev/null 2>&1 || true
+
+              echo "[SSH] registrando host key (ssh-keyscan)..."
+              ssh-keyscan -T 5 -H -t ed25519,rsa "${EC2_HOST}" >> /root/.ssh/known_hosts 2>/dev/null \
+                || (echo "❌ ssh-keyscan falló. ¿Seguro que ${EC2_HOST}:22 responde SSH?"; exit 23)
+
+              if [ -n "${EC2_KNOWN_HOSTS}" ]; then
+                printf "%s\\n" "${EC2_KNOWN_HOSTS}" >> /root/.ssh/known_hosts
+              fi
+
+              echo "[SSH] probando login..."
+              ssh ${SSH_OPTS} "${SSHUSER}@${EC2_HOST}" "echo SSH_OK"
+
+              echo "[SCP] subiendo docker-compose.yml..."
+              ssh ${SSH_OPTS} "${SSHUSER}@${EC2_HOST}" "mkdir -p ~/app"
+              scp ${SSH_OPTS} docker-compose.yml "${SSHUSER}@${EC2_HOST}:~/app/docker-compose.yml"
+
+              echo "[DEPLOY] ejecutando despliegue remoto..."
+              ssh ${SSH_OPTS} "${SSHUSER}@${EC2_HOST}" \
+                AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                AWS_REGION="${AWS_REGION}" \
+                AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}" \
+                ECR_REPOSITORY="${ECR_REPOSITORY}" \
+                IMAGE_TAG="${IMAGE_TAG}" \
+                IS_MAIN="${IS_MAIN}" \
+                IS_TAG="${IS_TAG}" \
+                APP_NAME="${APP_NAME}" \
+                DB_MODE="${DB_MODE}" \
+                DB_ENGINE="${DB_ENGINE}" \
+                DB_PORT="${DB_PORT}" \
+                DB_NAME="${DB_NAME}" \
+                DB_SSLMODE="${DB_SSLMODE}" \
+                APP_PORT="${APP_PORT}" \
+                DB_URI="${DB_URI}" \
+                DB_HOST="${DB_HOST}" \
+                DB_USER="${DB_USER}" \
+                DB_PASSWORD="${DB_PASSWORD}" \
+                'bash -s' <<'REMOTE_SCRIPT'
+set -euo pipefail
+
+# Yo limpio valores por si llegan con saltos de línea o CRLF
+clean() { printf "%s" "${1:-}" | tr -d '\r' | tr -d '\n'; }
+
+AWS_ACCESS_KEY_ID="$(clean "${AWS_ACCESS_KEY_ID}")"
+AWS_SECRET_ACCESS_KEY="$(clean "${AWS_SECRET_ACCESS_KEY}")"
+AWS_REGION="$(clean "${AWS_REGION}")"
+AWS_ACCOUNT_ID="$(clean "${AWS_ACCOUNT_ID}")"
+ECR_REPOSITORY="$(clean "${ECR_REPOSITORY}")"
+IMAGE_TAG="$(clean "${IMAGE_TAG}")"
+
+# ✅ Yo recibo flags de Jenkins para decidir si uso :latest (main) o :tag (tags)
+IS_MAIN="$(clean "${IS_MAIN:-false}")"
+IS_TAG="$(clean "${IS_TAG:-false}")"
+
+APP_NAME="$(clean "${APP_NAME:-app}")"
+# Yo fuerzo APP_NAME a un nombre válido para docker compose
+APP_NAME="$(printf "%s" "$APP_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+//; s/-+$//')"
+[ -z "$APP_NAME" ] && APP_NAME="app"
+
+DB_MODE="$(clean "${DB_MODE:-}")"; [ -z "$DB_MODE" ] && DB_MODE="local"
+DB_ENGINE="$(clean "${DB_ENGINE:-}")"; [ -z "$DB_ENGINE" ] && DB_ENGINE="mysql"
+DB_PORT="$(clean "${DB_PORT:-}")"
+DB_NAME="$(clean "${DB_NAME:-demo}")"
+DB_SSLMODE="$(clean "${DB_SSLMODE:-disable}")"
+APP_PORT="$(clean "${APP_PORT:-8083}")"
+
+DB_URI="$(clean "${DB_URI:-}")"
+DB_HOST="$(clean "${DB_HOST:-}")"
+DB_USER="$(clean "${DB_USER:-}")"
+DB_PASSWORD="$(clean "${DB_PASSWORD:-}")"
+
+cd ~/app
+export COMPOSE_PROJECT_NAME="$APP_NAME"
+
+# Yo valido inputs
+case "$DB_MODE" in local|remote) ;; *) echo "❌ DB_MODE inválido: $DB_MODE (local|remote)"; exit 1;; esac
+case "$DB_ENGINE" in mysql|postgres|mongo) ;; *) echo "❌ DB_ENGINE inválido: $DB_ENGINE (mysql|postgres|mongo)"; exit 1;; esac
+
+# Yo pongo DB_PORT por defecto si no viene
+if [ -z "$DB_PORT" ]; then
+  case "$DB_ENGINE" in mysql) DB_PORT=3306;; postgres) DB_PORT=5432;; mongo) DB_PORT=27017;; esac
+fi
+
+export COMPOSE_PROFILES="$DB_MODE"
+export DB_ENGINE DB_PORT DB_NAME APP_PORT DB_SSLMODE
+
+ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+# ✅ Yo elijo qué imagen desplegar:
+# - si vengo de main (y NO soy tag) => :latest
+# - si soy tag => :<TAG>
+if [ "${IS_MAIN:-false}" = "true" ] && [ "${IS_TAG:-false}" != "true" ]; then
+  export IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:latest"
+else
+  export IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+fi
+
+# Yo aplico workaround por variables “required” en servicios no usados del compose
+if [ "$COMPOSE_PROFILES" = "local" ]; then
+  [ -z "$DB_HOST" ] && DB_HOST="$DB_ENGINE"
+  [ -z "$DB_USER" ] && DB_USER="demo"
+  [ -z "$DB_PASSWORD" ] && DB_PASSWORD="demo"
+  export DB_HOST DB_USER DB_PASSWORD DB_URI
+
+  # Yo pongo dummies para que no explote compose si hay ${VAR?required} en servicios remote
+  export DB_HOST_REMOTE="${DB_HOST_REMOTE:-dummy}"
+  export DB_USER_REMOTE="${DB_USER_REMOTE:-dummy}"
+  export DB_PASSWORD_REMOTE="${DB_PASSWORD_REMOTE:-dummy}"
+  export DB_URI_REMOTE="${DB_URI_REMOTE:-dummy}"
+else
+  if [ "$DB_ENGINE" = "mongo" ]; then
+    [ -n "$DB_URI" ] || (echo "❌ Falta DB_URI para mongo remoto" && exit 1)
+    export DB_URI
+    export DB_HOST_REMOTE="${DB_HOST_REMOTE:-dummy}"
+    export DB_USER_REMOTE="${DB_USER_REMOTE:-dummy}"
+    export DB_PASSWORD_REMOTE="${DB_PASSWORD_REMOTE:-dummy}"
+    export DB_URI_REMOTE="${DB_URI_REMOTE:-${DB_URI}}"
+  else
+    [ -n "$DB_HOST" ] || (echo "❌ Falta DB_HOST para SQL remoto" && exit 1)
+    [ -n "$DB_USER" ] || (echo "❌ Falta DB_USER para SQL remoto" && exit 1)
+    [ -n "$DB_PASSWORD" ] || (echo "❌ Falta DB_PASSWORD para SQL remoto" && exit 1)
+    export DB_HOST DB_USER DB_PASSWORD DB_URI
+    export DB_HOST_REMOTE="${DB_HOST_REMOTE:-${DB_HOST}}"
+    export DB_USER_REMOTE="${DB_USER_REMOTE:-${DB_USER}}"
+    export DB_PASSWORD_REMOTE="${DB_PASSWORD_REMOTE:-${DB_PASSWORD}}"
+    export DB_URI_REMOTE="${DB_URI_REMOTE:-${DB_URI}}"
+  fi
+fi
+
+# Yo guardo el login de docker en /root para que “sudo docker” lo vea
+sudo -H mkdir -p /root/.docker
+export DOCKER_CONFIG=/root/.docker
+
+# Yo hago login a ECR usando aws-cli en docker
+sudo -H -E docker run --rm \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  -e AWS_REGION="$AWS_REGION" \
+  amazon/aws-cli:latest \
+  ecr get-login-password --region "$AWS_REGION" \
+| sudo -H -E docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+# ✅ Yo bajo el stack anterior y preparo el nuevo
+sudo -H -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" down --remove-orphans || true
+sudo -H -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" pull
+
+# ✅ Yo elimino contenedores con container_name fijo para evitar conflictos (si existen)
+# Porque container_name ignora el project name (-p) y puede chocar con despliegues anteriores.
+echo "[FIX] Busco container_name fijos en docker-compose.yml y los elimino si existen..."
+FIXED_NAMES="$(awk '
+  $1 ~ /^container_name:/ {print $2}
+' docker-compose.yml 2>/dev/null | tr -d '"' | tr -d "'" | tr -d '\r' || true)"
+
+if [ -n "${FIXED_NAMES:-}" ]; then
+  echo "[FIX] Encontré container_name: ${FIXED_NAMES}"
+  for n in $FIXED_NAMES; do
+    echo "[FIX] Borro contenedor fijo si existe: $n"
+    sudo docker rm -f "$n" 2>/dev/null || true
+  done
+else
+  echo "[FIX] No hay container_name fijos."
+fi
+
+# Yo libero el puerto si está ocupado (evito "port is already allocated")
+echo "[PORT] liberando APP_PORT=${APP_PORT} si está ocupado..."
+if [ -n "${APP_PORT:-}" ]; then
+  sudo docker rm -f $(sudo docker ps -q --filter "publish=${APP_PORT}") 2>/dev/null || true
+fi
+
+# ✅ Yo levanto el stack con el profile correcto
+sudo -H -E docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml --profile "$COMPOSE_PROFILES" up -d --remove-orphans
+
+echo "Estado:"
+sudo docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}"
+REMOTE_SCRIPT
+
+              echo "Deploy remoto terminado ✅"
+            '''
+          }
+        }
+      }
+    }
+
+  } // fin stages
+
+  post {
+    always {
+      // Yo evito el error de binding si algo falló antes de definir APP_NAME
+      echo "Pipeline finished for ${env.APP_NAME ?: 'app'}"
+
+      // Yo archivo JAR si existe (y no fallo si este repo no genera target/*.jar)
+      sh '''
+        set +e
+        ls -la target/*.jar >/dev/null 2>&1
+      '''
+      archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: false, allowEmptyArchive: true
+    }
+  }
+}

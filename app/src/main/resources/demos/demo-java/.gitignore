@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Java
+target/
+*.jar
+BOOT-INF/
+
+# Maven
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs
+.idea/
+.vscode/

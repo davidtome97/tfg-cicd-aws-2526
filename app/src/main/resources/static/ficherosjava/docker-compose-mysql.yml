@@ -1,0 +1,72 @@
+services:
+  # =========================
+  # MYSQL LOCAL
+  # =========================
+  mysql:
+    image: mysql:8
+    container_name: demojava-mysql
+    profiles: ["local"]
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-demo}
+      MYSQL_USER: ${DB_USER:-demo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-demo}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+    networks: [demo-net]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p${DB_ROOT_PASSWORD:-rootpass} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # =======================
+  # APP LOCAL (MySQL local)
+  # ========================
+  demo-java-local:
+    image: ${IMAGE_URI:-demo-java-local}
+    container_name: demo-java-app-local
+    profiles: ["local"]
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      DB_ENGINE: mysql
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:-demo}
+      DB_PASSWORD: ${DB_PASSWORD:-demo}
+      DB_USE_SSL: "false"
+    ports:
+      - "${APP_PORT:-8082}:8081"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [demo-net]
+    restart: unless-stopped
+
+  # =========================
+  # APP REMOTO (MySQL RDS)
+  # =========================
+  demo-java-remote:
+    image: ${IMAGE_URI:-demo-java-local}
+    container_name: demo-java-app-remote
+    profiles: ["remote"]
+    environment:
+      SPRING_PROFILES_ACTIVE: mysql
+      DB_ENGINE: mysql
+
+      DB_HOST: ${DB_HOST:?DB_HOST required}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-demo}
+      DB_USER: ${DB_USER:?DB_USER required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      DB_USE_SSL: ${DB_USE_SSL:-true}
+    ports:
+      - "${APP_PORT:-8082}:8081"
+    networks: [demo-net]
+    restart: unless-stopped
+
+networks:
+  demo-net:
+    driver: bridge
