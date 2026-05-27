@@ -45,7 +45,7 @@ public class ProductoService {
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + correo));
     }
 
-    // =========================================================
+    // ==========================================================
     // LISTAR SOLO PRODUCTOS DEL USUARIO
     // =========================================================
     @Transactional(readOnly = true)
