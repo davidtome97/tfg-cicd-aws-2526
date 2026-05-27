@@ -22,6 +22,9 @@ import org.springframework.security.web.SecurityFilterChain;
  */
 @Configuration
 public class WebSecurityConfig {
+    private static final String LOGIN_URL = "/login";
+    private static final String LOGOUT_URL = "/logout";
+    private static final String REGISTRO_URL = "/registro";
 
     /**
      * En este método construyo y registro la cadena de filtros de seguridad que aplica Spring Security.
@@ -51,9 +54,9 @@ public class WebSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Rutas públicas
                         .requestMatchers(
-                                "/login",
-                                "/registro",
-                                "/logout",
+                                LOGIN_URL,
+                                REGISTRO_URL,
+                                LOGOUT_URL,
                                 "/css/**",
                                 "/js/**",
                                 "/images/**"
@@ -66,8 +69,8 @@ public class WebSecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .formLogin(login -> login
-                        .loginPage("/login")
-                        .loginProcessingUrl("/login")
+                        .loginPage(LOGIN_URL)
+                        .loginProcessingUrl(LOGIN_URL)
                         .usernameParameter("correo")
                         .passwordParameter("password")
                         .defaultSuccessUrl("/aplicaciones", true)
@@ -75,7 +78,7 @@ public class WebSecurityConfig {
                         .permitAll()
                 )
                 .logout(logout -> logout
-                        .logoutUrl("/logout")
+                        .logoutUrl(LOGOUT_URL)
                         .logoutSuccessUrl("/login?logout")
                         .permitAll()
                 );

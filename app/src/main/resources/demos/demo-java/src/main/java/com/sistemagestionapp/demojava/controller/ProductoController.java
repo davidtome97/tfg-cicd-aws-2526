@@ -1,5 +1,6 @@
 package com.sistemagestionapp.demojava.controller;
 
+import com.sistemagestionapp.demojava.model.Producto;
 import com.sistemagestionapp.demojava.service.ProductoService;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -11,6 +12,9 @@ import java.security.Principal;
 @RequestMapping("/productos")
 public class ProductoController {
 
+    private static final String PRODUCTOS_VIEW = "productos";
+    private static final String PRODUCTO_ATTR = "producto";
+
     private final ProductoService productoService;
 
     public ProductoController(ProductoService productoService) {
@@ -20,9 +24,9 @@ public class ProductoController {
     @GetMapping
     public String listar(Model model, Principal principal) {
         String correo = principal.getName();
-        model.addAttribute("productos", productoService.listarDelUsuario(correo));
-        model.addAttribute("producto", new com.sistemagestionapp.demojava.model.Producto()); // para el form
-        return "productos";
+        model.addAttribute(PRODUCTOS_VIEW, productoService.listarDelUsuario(correo));
+        model.addAttribute(PRODUCTO_ATTR, new Producto());
+        return PRODUCTOS_VIEW;
     }
 
     @GetMapping("/editar/{id}")
@@ -30,9 +34,9 @@ public class ProductoController {
         String correo = principal.getName();
         Object producto = productoService.buscarDelUsuario(id, correo);
 
-        model.addAttribute("productos", productoService.listarDelUsuario(correo));
-        model.addAttribute("producto", producto);
-        return "productos";
+        model.addAttribute(PRODUCTOS_VIEW, productoService.listarDelUsuario(correo));
+        model.addAttribute(PRODUCTO_ATTR, producto);
+        return PRODUCTOS_VIEW;
     }
 
     @PostMapping
